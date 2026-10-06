@@ -14,6 +14,7 @@ class FakeControl(ServiceControl):
         self.calls = []
         self.pending = 0
         self.managed = True
+        self.llm_installed = True
 
     def status(self, token):
         return {'worker': {'running': True, 'managed': self.managed, 'pending': self.pending,
@@ -70,6 +71,11 @@ class ControlTest(unittest.TestCase):
     def test_managed_service_restart(self):
         self.assertEqual(self.call('POST', '/control', {'service': 'llama', 'action': 'restart'})[0], 200)
         self.assertEqual(self.control.calls, [('llama', 'restart')])
+
+    def test_ocr_only_does_not_start_an_uninstalled_llm(self):
+        self.control.llm_installed = False
+        self.assertEqual(self.call('POST', '/control', {'service': 'llama', 'action': 'start'})[0], 400)
+        self.assertEqual(self.control.calls, [])
 
 
 if __name__ == '__main__':

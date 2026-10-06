@@ -43,7 +43,7 @@ return [
         'kobunReadingAssistance' => Site\ResourcePageBlockLayout\ReadingAssistance::class,
     ]],
     // Override these deployment-specific values in config/local.config.php.
-    'kobun_ocr' => [
+    'kobun_ocr' => array_replace([
         'backend_url' => getenv('KOBUN_BACKEND_URL') ?: 'http://127.0.0.1:8766',
         'control_url' => getenv('KOBUN_CONTROL_URL') ?: 'http://127.0.0.1:8767',
         'token_file' => getenv('KOBUN_TOKEN_FILE') ?: OMEKA_PATH . '/var/kobun-ocr-translation/backend-token',
@@ -51,5 +51,5 @@ return [
         'resource_hosts' => ['dc.tulips.tsukuba.ac.jp', 'omeka-s.ddev.site'],
         'public_ocr_pages_per_hour' => 24,
         'public_translations_per_hour' => 6,
-    ],
+    ], require __DIR__ . '/backend.config.php'),
 ];

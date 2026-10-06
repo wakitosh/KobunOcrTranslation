@@ -88,6 +88,8 @@ def local_json(base, endpoint, body, timeout=240, token_file=None):
 
 
 def translate(payload, config):
+    if config.get('llm_model_id') == '':
+        raise ValueError('ローカルLLMは未導入です。モデルを導入するか、商用APIまたは訳文の直接入力を使用してください。')
     lines = payload["lines"]
     selected = set(payload.get("line_ids") or [line["id"] for line in lines])
     original = "\n".join(line.get("raw", "") for line in lines if line["id"] in selected)

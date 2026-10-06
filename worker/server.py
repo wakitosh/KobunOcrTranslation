@@ -83,6 +83,8 @@ def make_handler(store, token, config):
                 if parts == ["health"] and self.command == "GET":
                     ready = False
                     try:
+                        if config.get('llm_model_id') == '':
+                            raise ValueError('Local LLM not installed')
                         with urllib.request.urlopen(config["llm_url"] + "/health", timeout=1) as response:
                             ready = response.status == 200
                     except Exception:

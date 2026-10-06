@@ -36,7 +36,9 @@ def owned(name, entry):
     return entry['marker'] in result.stdout
 
 
-def initialize(runtime, model_id=None):
+def initialize(runtime, model_id=None, ocr_only=False):
+    if model_id and ocr_only:
+        raise ValueError('Choose --model or --ocr-only, not both.')
     runtime.mkdir(parents=True, exist_ok=True)
     (runtime/'.htaccess').write_text('Require all denied\n')
     token = runtime/'backend-token'
@@ -44,17 +46,17 @@ def initialize(runtime, model_id=None):
         token.write_text(secrets.token_urlsafe(40)); token.chmod(0o600)
     file = runtime/'config.json'
     config = json.loads(file.read_text()) if file.exists() else {}
-    if not model_id and config:
+    if not model_id and not ocr_only and config:
         return config
-    if not model_id:
-        raise ValueError('Choose --model explicitly. Run assets.py list first.')
+    if not model_id and not ocr_only:
+        raise ValueError('Choose --model or --ocr-only explicitly. Run assets.py list first.')
     state_file = runtime/'processes.json'
     state = json.loads(state_file.read_text()) if state_file.exists() else {}
     if any(owned(name, entry) for name, entry in state.items()):
         raise ValueError('Stop the local servers before changing models.')
-    entry = model_entry(model_id)
-    model = runtime/'models'/entry['filename']
-    if not verify(model, entry):
+    entry = model_entry(model_id) if model_id else None
+    model = runtime/'models'/entry['filename'] if entry else None
+    if entry and not verify(model, entry):
         raise ValueError(f'Model not verified: {model}. Fetch or place it first with assets.py.')
     defaults = {'threads': 4, 'llm_url': 'http://127.0.0.1:8765', 'llama_revision': 'b10980',
         'context_size': 4096, 'enable_thinking': False, 'max_output_tokens': 1024, 'job_timeout': 300,
@@ -62,11 +64,11 @@ def initialize(runtime, model_id=None):
     config = {**defaults, **config, 'ndl_model_dir': str(runtime/'models/ndl'),
         'ndl_code_root': str(Path(__file__).parent/'vendor/ndlkotenocr'),
         'ndl_revision': 'ede4283845cdc0ba2bda8b7ebfc3dc80b33c92c8',
-        'llm_model_id': model_id, 'llm_model_path': str(model), 'llm_model': entry['name'],
-        'llm_model_sha256': entry['sha256'], 'llm_token_file': str(token),
+        'llm_model_id': model_id or '', 'llm_model_path': str(model) if model else '', 'llm_model': entry['name'] if entry else '',
+        'llm_model_sha256': entry['sha256'] if entry else '', 'llm_token_file': str(token),
         'prompt_revision': 'kobun-ja-translation-2', 'max_output_tokens': 1024,
         'sampling': {'temperature': 0}, 'no_repack': False, 'skip_chat_parsing': False,
-        **entry.get('translation_profile', {})}
+        **(entry.get('translation_profile', {}) if entry else {})}
     config.pop('ndl_root', None)
     file.write_text(json.dumps(config, ensure_ascii=False, indent=2)); file.chmod(0o600)
     return config
@@ -77,14 +79,15 @@ def main():
     parser.add_argument('action', choices=['init', 'start', 'stop', 'status'])
     parser.add_argument('--runtime', type=Path, default=Path(os.environ.get('KOBUN_RUNTIME', DEFAULT_RUNTIME)))
     parser.add_argument('--model', help='Model id; only for init. See assets.py list.')
+    parser.add_argument('--ocr-only', action='store_true', help='Initialize without a local LLM; only for init.')
     parser.add_argument('--service', choices=['all', 'llama', 'worker'], default='all',
         help='Start or stop one service. The default is both services.')
     args = parser.parse_args()
     runtime = args.runtime.resolve()
-    if args.model and args.action != 'init':
-        parser.error('--model is only accepted with init; stop before switching')
+    if (args.model or args.ocr_only) and args.action != 'init':
+        parser.error('--model/--ocr-only are only accepted with init; stop before switching')
     if args.action == 'init':
-        config = initialize(runtime, args.model)
+        config = initialize(runtime, args.model, args.ocr_only)
         print(f'Config: {runtime / "config.json"}\nModel: {config["llm_model"]}')
         return
     pidfile = runtime/'processes.json'
@@ -114,6 +117,11 @@ def main():
             pidfile.unlink(missing_ok=True)
         return
     config = initialize(runtime)
+    if not config.get('llm_model_id'):
+        if args.service == 'llama':
+            raise ValueError('Local LLM is not installed. Initialize with --model first.')
+        if args.service == 'all':
+            args.service = 'worker'
     if args.service in ('all', 'llama'):
         entry = model_entry(config['llm_model_id'])
         if not verify(Path(config['llm_model_path']), entry):

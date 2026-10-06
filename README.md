@@ -36,6 +36,10 @@
 
 ## インストール
 
+RHEL 9.7本番サーバは[INSTALL_RHEL9.md](INSTALL_RHEL9.md)のGitHub取得＋一括インストーラを推奨します。標準配置はOmekaが`/opt/omeka-s`、バックエンドが`/opt/kobun-ocr-translation`です。設定・トークンの接続情報はWeb非公開領域から自動読込し、既存のOmeka設定は自動編集しません。運用業者への短い説明は[DEPLOYMENT_TEAMS.md](DEPLOYMENT_TEAMS.md)を利用できます。
+
+以下はZIP・手動設置の概要です。
+
 1. ディレクトリ名を `KobunOcrTranslation` としてOmeka Sの `modules/` に配置し、管理画面で有効化します。
 2. [DISTRIBUTION.md](DISTRIBUTION.md) のRHEL 9.7手順に従い、Python環境、OCR・LLMモデル、llama.cppをWeb非公開の実行領域へ準備します。
 3. `config/local.config.php` でworker・運用サービスの接続先、PHPから読めるトークンファイル、許可するIIIFホストを設定します。

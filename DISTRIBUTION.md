@@ -30,6 +30,10 @@ Qwenモデルも本体とは別のライセンスです。今回はモデルフ�
 
 ## RHEL 9.7への設置（単一サーバ・CPU実行）
 
+**本番の標準手順は[INSTALL_RHEL9.md](INSTALL_RHEL9.md)の一括導入を使用してください。** `/opt/omeka-s`のモジュールディレクトリへGitHubのコードを取得し、`worker/install_rhel9.py`で`/opt/kobun-ocr-translation`へバックエンドを構築します。計画表示が初期動作で、`--apply`時だけ専用ユーザ作成・環境構築・サービス登録を行います。運用業者向けの短い依頼文は[DEPLOYMENT_TEAMS.md](DEPLOYMENT_TEAMS.md)です。
+
+以下は構成を個別に確認したい場合の手動設置例です。一括導入と併用せず、配置・ユーザ・接続設定を揃えてください。
+
 以下はOmeka Sの配置先を `/var/www/omeka-s`、非公開の実行領域を `/var/lib/kobun-ocr-translation` とした例です。実際の配置先、PHP実行ユーザー、IIIFホストは環境に合わせて置き換えてください。workerとLLMサーバは個別の常駐サービスを登録せず、Omekaのモジュール設定画面から起動・停止します。画面から両者を起動できるよう、**運用サービスだけ**をsystemdで常駐させます。この手順はRHEL 9.7向けに作成しましたが、RHEL 9.7実機での導入・性能検証はまだ行っていません。
 
 RHEL 9の標準Pythonは3.9ですが、Python 3.11を`python3.11`と`python3.11-pip`のパッケージで併用できます。workerはPython 3.11の仮想環境をWeb非公開の実行領域に作成し、システムの`python3`は変更しません。Red Hatも、Pythonパッケージをシステム全体へ直接pipで導入せず、仮想環境を使う方法を案内しています。[RHEL 9のPython手順](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/installing_and_using_dynamic_programming_languages/assembly_installing-and-using-python_installing-and-using-dynamic-programming-languages)

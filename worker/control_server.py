@@ -25,6 +25,7 @@ class ServiceControl:
         self.lock = threading.Lock()
         config = json.loads((self.runtime/'config.json').read_text())
         self.llm_url = config.get('llm_url', 'http://127.0.0.1:8765').rstrip('/')
+        self.llm_installed = config.get('llm_model_id') != ''
 
     def health(self, url: str, token: str | None = None) -> dict | None:
         headers = {'Authorization': 'Bearer ' + token} if token else {}
@@ -44,7 +45,7 @@ class ServiceControl:
 
     def status(self, token: str) -> dict:
         worker = self.health('http://127.0.0.1:8766/health', token)
-        llama = self.health(self.llm_url + '/health')
+        llama = self.health(self.llm_url + '/health') if self.llm_installed else None
         worker_managed = self._pid_state('worker')
         llama_managed = self._pid_state('llama')
         return {
@@ -75,6 +76,8 @@ class ServiceControl:
     def operate(self, service: str, action: str, token: str) -> dict:
         if service not in ('worker', 'llama') or action not in ('start', 'stop', 'restart'):
             raise ValueError('不正なサービス操作です。')
+        if service == 'llama' and action in ('start', 'restart') and not self.llm_installed:
+            raise ValueError('ローカルLLMは未導入です。モデルを導入してから起動してください。')
         with self.lock:
             before = self.status(token)
             if action in ('stop', 'restart') and (before['worker']['pending'] or 0) > 0:
