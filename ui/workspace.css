@@ -1,0 +1,168 @@
+.kobun-app { --accent:#315e46; --accent-strong:#225740; --hand:#b55331; --type:#00897b; --region:#b48137; --muted:#657369; color:#20352c; background:#f8faf8; border:1px solid #d6e0d8; border-radius:8px; font-family:system-ui,-apple-system,'Noto Sans JP',sans-serif; font-size:14px; }
+.kobun-app * { box-sizing:border-box; }
+.kobun-app button { font:inherit; font-size:12px; cursor:pointer; border:1px solid #becbc1; background:#fff; color:#254535; border-radius:4px; padding:7px 10px; margin:0; min-height:34px; line-height:1.4; box-shadow:none; }
+.kobun-app button:hover:not(:disabled) { background:#e7efe9; }
+.kobun-app button:disabled { opacity:.45; cursor:default; }
+.kobun-app button:focus-visible,.kobun-app input:focus-visible,.kobun-app textarea:focus-visible,.kobun-app select:focus-visible { outline:3px solid #8bb899; outline-offset:2px; }
+.kobun-app input,.kobun-app textarea,.kobun-app select { font:inherit; color:#20352c; border:1px solid #c3d0c6; border-radius:4px; background:#fff; padding:8px; width:auto; margin:0; }
+.kobun-app p { margin:8px 0; line-height:1.7; }
+.kobun-app h3 { font-size:14px; font-weight:650; line-height:1.7; margin:0 0 10px; }
+.kobun-app .kobun-primary { background:var(--accent); color:white; border-color:var(--accent); padding:10px 18px; font-weight:600; }
+.kobun-app .kobun-primary:hover:not(:disabled) { background:#244733; }
+.kobun-app .kobun-link { border:1px solid #9fb2a4; background:#fff; padding:7px 10px; text-decoration:none; font-weight:600; }
+.kobun-app .kobun-disclosure { display:inline-flex; align-items:center; gap:7px; font-weight:650; }
+.kobun-app .kobun-disclosure::before { content:'＋'; font-weight:700; }
+.kobun-app .kobun-disclosure[aria-expanded=true]::before { content:'−'; }
+.kobun-heading { display:flex; align-items:flex-end; justify-content:space-between; padding:18px 22px 12px; gap:16px; }
+.kobun-material-picker { flex:1 1 480px; max-width:650px; display:flex; flex-direction:column; gap:5px; }
+.kobun-material-picker label { color:var(--muted); font-size:11px; font-weight:700; }
+.kobun-material-picker select { width:100%; font-weight:600; }
+.kobun-utilities { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:7px 10px; }
+.kobun-app .kobun-steps { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); list-style:none; padding:0 18px; margin:0; border-block:1px solid #d6e0d8; background:#f0f4f0; }
+.kobun-steps li { margin:0; padding:0; }
+.kobun-steps button { border:0; border-bottom:3px solid transparent; border-radius:0; background:transparent; width:100%; padding:14px 8px; font-size:13px; display:flex; gap:10px; align-items:center; justify-content:center; }
+.kobun-steps button[aria-current=step] { border-bottom-color:var(--accent); font-weight:700; background:#e4eee6; }
+.kobun-steps button span { display:grid; place-items:center; width:24px; height:24px; border:1px solid #a5b8aa; border-radius:50%; font-size:12px; }
+.kobun-steps button[aria-current=step] span { background:var(--accent); color:white; border-color:var(--accent); }
+.kobun-record-toggle { display:flex; justify-content:flex-start; padding:10px 22px 0; background:#fff; }
+.kobun-stage-description { padding:13px 22px; display:flex; gap:18px; font-size:13px; align-items:baseline; }
+.kobun-stage-description span { color:var(--muted); }
+.kobun-app .kobun-source { display:block; padding:4px 22px 18px; margin:0; }
+.kobun-source label { display:block; font-size:13px; font-weight:600; margin-bottom:7px; }
+.kobun-source input { width:100%; max-width:760px; }
+.kobun-layout { display:grid; grid-template-columns:145px minmax(240px,1fr) minmax(390px,420px); border-top:1px solid #d6e0d8; }
+.kobun-pages { padding:14px 10px; border-right:1px solid #d6e0d8; max-height:635px; overflow:auto; }
+.kobun-pages>button { width:100%; display:flex; gap:8px; align-items:center; margin-bottom:6px; padding:8px; text-align:left; }
+.kobun-pages>button b { color:var(--muted); min-width:20px; }
+.kobun-pages button span { overflow-wrap:anywhere; }
+.kobun-pages>button span { display:flex; flex-direction:column; gap:3px; min-width:0; }
+.kobun-pages>button span strong { font-size:11px; overflow-wrap:anywhere; }
+.kobun-pages>button span small { color:var(--muted); font-size:10px; }
+.kobun-page-context { border:1px solid #cbd8ce; background:#fff; border-radius:5px; padding:8px; margin-bottom:14px; display:flex; flex-direction:column; gap:3px; }
+.kobun-page-context span,.kobun-page-context small { color:var(--muted); font-size:10px; overflow-wrap:anywhere; }
+.kobun-page-context strong { font-size:12px; line-height:1.5; }
+.kobun-app .is-selected { background:#e6efe8; border-color:#54765c; }
+.kobun-editor { display:flex; flex-direction:column; min-width:0; }
+.kobun-tools { display:flex; align-items:center; flex-wrap:wrap; gap:6px; }
+.kobun-image-tools { padding:9px; background:#fff; min-height:50px; }
+.kobun-tools label { display:flex; align-items:center; gap:5px; font-size:12px; margin-right:auto; }
+.kobun-tools .kobun-reading-direction { margin-right:0; }
+.kobun-reading-direction select { padding:5px 7px; max-width:230px; }
+.kobun-tools input[type=checkbox] { width:14px; height:14px; margin:0; }
+.kobun-viewer { min-height:420px; height:500px; flex:1; }
+.kobun-empty { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#d5dfd9; text-align:center; padding:25px; }
+.kobun-empty b { font-size:18px; color:#e9eeea; }
+.kobun-empty p { font-size:13px; }
+.kobun-caption { padding:0 10px; font-size:11px; color:var(--muted); overflow-wrap:anywhere; }
+.kobun-results { padding:16px; border-left:1px solid #d6e0d8; min-width:0; max-height:635px; overflow:auto; }
+.kobun-guide { padding:15px 0; }
+.kobun-guide p { font-size:13px; }
+.kobun-tabs { display:flex; gap:16px; border-bottom:1px solid #ccd8ce; margin-bottom:18px; }
+.kobun-tabs button { border:0; border-bottom:3px solid transparent; border-radius:0; background:transparent; padding:8px 1px; }
+.kobun-tabs button[aria-selected=true] { color:var(--accent-strong); border-bottom-color:var(--accent); font-weight:700; }
+.kobun-muted { color:var(--muted); font-size:12px; }
+.kobun-app .kobun-lines,.kobun-app .kobun-order { list-style:none; margin:12px 0; padding:0; }
+.kobun-lines li { display:flex; gap:6px; align-items:flex-start; padding:6px 3px; border:1px solid transparent; border-radius:5px; margin-bottom:5px; }
+.kobun-lines li>button { min-width:30px; font-size:12px; padding:4px; }
+.kobun-lines textarea { width:100%; min-height:75px; resize:vertical; line-height:1.7; font-size:14px; }
+.kobun-order li { margin:0 0 6px; padding:0; }
+.kobun-order button { display:flex; width:100%; text-align:left; align-items:center; gap:12px; }
+.kobun-order button b { min-width:22px; }
+.kobun-order button span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.kobun-order-label { font-size:12px; color:var(--muted); margin-left:auto; }
+.kobun-app .kobun-order-arrow { font-size:18px; font-weight:700; padding:3px 10px; min-width:38px; }
+.kobun-direction { display:inline-block; color:var(--accent-strong); background:#e6efe8; border-radius:12px; padding:2px 9px; font-size:11px!important; }
+/* 縦組みの列方向はページの読み方向設定に追従する。 */
+.kobun-order.is-vertical { display:flex; flex-direction:row; justify-content:flex-start; align-items:stretch; gap:6px; overflow-x:auto; overflow-y:hidden; min-height:260px; padding:3px; }
+.kobun-order.is-vertical.reading-rtl { flex-direction:row-reverse; }
+.kobun-order.is-vertical li { flex:0 0 auto; margin:0; }
+.kobun-order.is-vertical button { width:48px; height:250px; flex-direction:column; gap:8px; padding:8px 6px; text-align:start; }
+.kobun-order.is-vertical button b { min-width:0; writing-mode:horizontal-tb; }
+.kobun-order.is-vertical button span { writing-mode:vertical-rl; text-orientation:mixed; white-space:nowrap; max-height:205px; max-width:100%; }
+.kobun-lines.is-vertical { display:flex; flex-direction:row; justify-content:flex-start; align-items:stretch; gap:7px; overflow-x:auto; overflow-y:hidden; min-height:430px; padding:3px; }
+.kobun-lines.is-vertical.reading-rtl { flex-direction:row-reverse; }
+.kobun-lines.is-vertical li { flex:0 0 auto; flex-direction:column; align-items:center; height:420px; margin:0; }
+.kobun-lines.is-vertical li>button { writing-mode:horizontal-tb; width:32px; min-height:28px; }
+.kobun-lines textarea.is-vertical { writing-mode:vertical-rl; text-orientation:mixed; width:76px; height:375px; min-height:0; resize:horizontal; line-height:1.8; }
+.kobun-lines.is-vertical li.is-horizontal { width:230px; }
+.kobun-lines.is-vertical textarea.is-horizontal { width:220px; height:100px; resize:both; }
+.kobun-range { display:flex; align-items:center; gap:12px; }
+.kobun-range label { display:flex; flex-direction:column; gap:5px; font-size:12px; }
+.kobun-range select { min-width:80px; }
+.kobun-results label[for=kobun-translation-input] { display:block; font-size:13px; font-weight:600; margin:15px 0 7px; }
+#kobun-translation-input { width:100%; min-height:260px; resize:vertical; line-height:1.9; }
+.kobun-manual-translation>label { display:block; margin:0 0 7px; font-size:13px; font-weight:600; }
+#kobun-manual-translation { width:100%; min-height:260px; resize:vertical; line-height:1.9; font-weight:400; }
+.kobun-notice { font-size:12px; border-left:3px solid #b28d51; background:#f4f0e7; padding:10px; }
+.kobun-translation { white-space:pre-wrap; font-size:15px; line-height:2; margin:20px 0; }
+.kobun-result-actions { display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-start; margin:14px 0; }
+.kobun-app .kobun-danger { color:#8a3428; border-color:#c99790; background:#fff; }
+.kobun-app .kobun-danger:hover:not(:disabled) { color:#fff; border-color:#8a3428; background:#8a3428; }
+.kobun-uncertainties { border-top:1px solid #ccd8ce; padding-top:14px; font-size:12px; }
+.kobun-uncertainties ul { margin:8px 0; padding-left:20px; }
+.kobun-uncertainties li { margin-bottom:14px; }
+.kobun-uncertainties q { font-weight:600; overflow-wrap:anywhere; }
+.kobun-results details { font-size:12px; margin:16px 0; }
+.kobun-app details>summary { list-style:none; cursor:pointer; display:inline-flex; align-items:center; gap:7px; border:1px solid #9fb2a4; background:#fff; border-radius:4px; padding:8px 11px; color:#254535; font-weight:650; }
+.kobun-app details>summary::before { content:'＋'; font-weight:700; }
+.kobun-app details[open]>summary::before { content:'−'; }
+.kobun-app details>summary::-webkit-details-marker { display:none; }
+.kobun-app details>summary:hover { background:#e7efe9; }
+.kobun-app details>summary:focus-visible { outline:3px solid #8bb899; outline-offset:2px; }
+.kobun-record { padding:16px 22px; background:#fff; border-bottom:1px solid #d6e0d8; font-size:12px; }
+.kobun-record pre { white-space:pre-wrap; word-break:break-word; background:#edf1ed; border:0; font-size:11px; max-height:300px; overflow:auto; padding:10px; }
+.kobun-publication { display:inline-block; border-radius:999px; padding:3px 8px; background:#e4e8e5; color:#48534c; font-size:11px; font-weight:700; }
+.kobun-publication.is-reviewed { background:#fff0c7; color:#684a00; }
+.kobun-publication.is-published { background:#dcefe1; color:#174b28; }
+.kobun-attribution-disclosure { margin:14px 0 10px; }
+.kobun-attribution-editor { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 14px; margin:10px 0 0; padding:12px; border:1px solid #b9c9bd; }
+.kobun-attribution-editor .kobun-muted,.kobun-attribution-editor .is-wide { grid-column:1/-1; }
+.kobun-attribution-editor label { display:grid; grid-template-columns:minmax(0,1fr); align-content:start; gap:5px; margin:8px 0; font-size:13px; font-weight:650; }
+.kobun-attribution-editor input,.kobun-attribution-editor select,.kobun-attribution-editor textarea { width:100%; min-width:0; }
+.kobun-attribution-editor textarea { min-height:64px; }
+#kobun-history-list { margin:8px 0 16px; padding-left:24px; }
+.kobun-publication-panel { display:flex; flex-direction:column; gap:4px; }
+.kobun-publication-summary { padding:12px; border:1px solid #ccd8ce; background:#f8faf8; }
+.kobun-publication-summary dl { display:grid; grid-template-columns:max-content minmax(0,1fr); gap:5px 12px; margin:10px 0; }
+.kobun-publication-summary dt { color:var(--muted); font-size:12px; font-weight:700; }
+.kobun-publication-summary dd { margin:0; overflow-wrap:anywhere; }
+.kobun-publication-panel>label { display:grid; gap:5px; margin-top:12px; font-size:13px; font-weight:650; }
+.kobun-publication-panel>label input,.kobun-publication-panel>label textarea { width:100%; }
+.kobun-publication-panel input,.kobun-publication-panel select,.kobun-publication-panel textarea { font-weight:400; }
+.kobun-field-label { display:flex; align-items:center; gap:7px; }
+.kobun-field-label b { padding:2px 6px; border-radius:10px; background:#8a3428; color:#fff; font-size:10px; }
+.kobun-publication-panel .kobun-attribution-editor { grid-template-columns:1fr; }
+.kobun-publication-panel .kobun-attribution-editor>* { grid-column:1; }
+.kobun-publication-panel .kobun-attribution-disclosure>summary { max-width:100%; }
+.kobun-review-note textarea { min-height:100px; resize:vertical; }
+@media (max-width:760px) { .kobun-attribution-editor { grid-template-columns:1fr; } .kobun-attribution-editor>* { grid-column:1; } }
+.kobun-prewrap { white-space:pre-wrap; }
+.kobun-transcription-actions { display:flex; align-items:flex-start; flex-wrap:wrap; gap:8px; margin:0 0 16px; padding:0 0 14px; border-bottom:1px solid #d6e0d8; }
+.kobun-transcription-actions>.kobun-import { margin:0; }
+.kobun-transcription-actions>.kobun-import[open] { flex:1 0 100%; order:2; }
+.kobun-import { min-width:0; }
+.kobun-import>label { display:grid; gap:5px; margin:12px 0 7px; font-size:12px; font-weight:600; }
+.kobun-import .kobun-import-file input { width:100%; font-weight:400; }
+.kobun-import textarea { width:100%; }
+.kobun-import textarea { min-height:230px; resize:vertical; white-space:pre; line-height:1.7; }
+.kobun-import details { margin:10px 0; }
+.kobun-import details ul { max-height:180px; overflow:auto; padding-left:20px; }
+.kobun-import-sections { min-width:0; max-height:190px; overflow:auto; margin:12px 0; padding:8px 10px; border:1px solid #c3d0c6; border-radius:4px; }
+.kobun-import-sections legend { padding:0 5px; font-size:12px; font-weight:650; }
+.kobun-import-sections label { display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:8px; padding:5px 2px; font-size:12px; cursor:pointer; }
+.kobun-import-sections input { width:14px; height:14px; }
+.kobun-import-sections span { overflow-wrap:anywhere; }
+.kobun-import-sections small { color:var(--muted); white-space:nowrap; }
+.kobun-import-count { color:#8b3e2b; font-size:12px; font-weight:650; }
+.kobun-import-count.is-matched { color:var(--accent-strong); }
+.kobun-error { display:flex; align-items:center; justify-content:space-between; background:#fff1ea; border-bottom:1px solid #efcfbd; color:#843d27; padding:10px 20px; gap:10px; font-size:13px; }
+.kobun-actionbar { position:sticky; bottom:0; z-index:150; background:#fff; border-top:1px solid #bdcdc1; padding:14px 20px; display:flex; align-items:center; justify-content:space-between; gap:12px; box-shadow:0 -3px 12px #20352c0c; }
+.kobun-action-status { font-size:12px; color:var(--muted); display:flex; align-items:center; gap:8px; }
+.kobun-spinner { height:15px; width:15px; border:2px solid #5b8068; border-top-color:transparent; border-radius:50%; animation:kobun-spin 1s linear infinite; }
+@keyframes kobun-spin { to { transform:rotate(360deg); } }
+.kobun-credit { padding:10px 20px; background:#f8faf8; font-size:10px; color:var(--muted); border-top:1px solid #d6e0d8; line-height:1.7; }
+.kobun-credit a { color:var(--accent); text-decoration:underline; }
+.kobun-app .edit-del { min-height:24px; width:24px; padding:0; background:var(--hand); color:white; border:2px solid white; border-radius:50%; font-size:15px; }
+@media(max-width:1150px) { .kobun-layout { grid-template-columns:115px minmax(220px,1fr) 360px; }.kobun-results { padding:12px; }.kobun-actionbar { flex-wrap:wrap; } }
+@media(max-width:900px) { .kobun-layout { grid-template-columns:110px minmax(0,1fr); }.kobun-results { grid-column:1/-1; border-top:1px solid #d6e0d8; border-left:0; max-height:500px; }.kobun-viewer { min-height:360px; height:420px; }.kobun-steps { padding:0!important; }.kobun-steps button { font-size:12px; gap:5px; }.kobun-stage-description { flex-direction:column; gap:5px; }.kobun-actionbar { padding:10px; }.kobun-heading { align-items:flex-start; flex-wrap:wrap; }.kobun-material-picker { flex-basis:100%; max-width:none; }.kobun-utilities { justify-content:flex-start; } }
+@media(max-width:600px) { .kobun-steps button { flex-direction:column; }.kobun-heading { flex-direction:column; }.kobun-utilities { align-items:flex-start; }.kobun-app .kobun-primary { padding:10px; }.kobun-actionbar>.kobun-tools { width:100%; }.kobun-primary { flex:1; } }

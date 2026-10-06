@@ -1,0 +1,25 @@
+{
+  "name": "omeka-kobun-ocr-translation",
+  "private": true,
+  "version": "0.10.1",
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit && vite build",
+    "test:ui": "playwright test",
+    "test:llm": "playwright test --config playwright.llm.config.ts",
+    "test:policy": "php tests/visitor-policy.php"
+  },
+  "dependencies": {
+    "openseadragon": "5.0.1",
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.58.2",
+    "@types/openseadragon": "4.1.0",
+    "@types/react": "19.2.7",
+    "@types/react-dom": "19.2.3",
+    "typescript": "5.9.3",
+    "vite": "7.3.1"
+  }
+}

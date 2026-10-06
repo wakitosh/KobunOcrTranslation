@@ -1,0 +1,48 @@
+{
+  "llm": [
+    {
+      "id": "qwen3-4b-q4km",
+      "name": "Qwen3-4B-Instruct-2507",
+      "filename": "Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
+      "repository": "bartowski/Qwen_Qwen3-4B-Instruct-2507-GGUF",
+      "revision": "ae44f08e1392f39c0e474af10c3ff8355c8b6688",
+      "source_filename": "Qwen_Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
+      "sha256": "2fde00ce69dd4899c70d020845e2638353015bba0fdf161b3eb965f2bca4464e",
+      "license": "Apache-2.0",
+      "license_url": "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/blob/main/LICENSE",
+      "size_bytes": 2497280736,
+      "url": "https://huggingface.co/bartowski/Qwen_Qwen3-4B-Instruct-2507-GGUF/resolve/ae44f08e1392f39c0e474af10c3ff8355c8b6688/Qwen_Qwen3-4B-Instruct-2507-Q4_K_M.gguf"
+    },
+    {
+      "id": "qwen35-9b-q4km",
+      "name": "Qwen3.5-9B",
+      "filename": "Qwen_Qwen3.5-9B-Q4_K_M.gguf",
+      "repository": "bartowski/Qwen_Qwen3.5-9B-GGUF",
+      "revision": "182be2fd6c7bc44887d88a91cb03ff009cc9f549",
+      "source_filename": "Qwen_Qwen3.5-9B-Q4_K_M.gguf",
+      "sha256": "d784ce9eda1a5a7b51e8f705a9e6310844bf4f173654d115823c775fdea56d43",
+      "size_bytes": 6169341984,
+      "license": "Apache-2.0",
+      "license_url": "https://huggingface.co/Qwen/Qwen3.5-9B/blob/main/LICENSE",
+      "url": "https://huggingface.co/bartowski/Qwen_Qwen3.5-9B-GGUF/resolve/182be2fd6c7bc44887d88a91cb03ff009cc9f549/Qwen_Qwen3.5-9B-Q4_K_M.gguf"
+    }
+  ],
+  "ocr": [
+    {
+      "filename": "parseq-ndl-32x384-tiny-10.onnx",
+      "size_bytes": 42442247,
+      "sha256": "fd75b2c435d053fab9f9e563393ee5b6654a41434b2358b50fb63498a2c85b79",
+      "url": "https://raw.githubusercontent.com/ndl-lab/ndlkotenocr-lite/ede4283845cdc0ba2bda8b7ebfc3dc80b33c92c8/src/model/parseq-ndl-32x384-tiny-10.onnx",
+      "license": "CC-BY-4.0",
+      "license_url": "https://github.com/ndl-lab/ndlkotenocr-lite/blob/ede4283845cdc0ba2bda8b7ebfc3dc80b33c92c8/LICENCE"
+    },
+    {
+      "filename": "rtmdet-s-1280x1280.onnx",
+      "size_bytes": 40188733,
+      "sha256": "f46267754d406431f6e035f9e20b8552af8ff1ab5ca13bcac8f4b1abbd02090c",
+      "url": "https://raw.githubusercontent.com/ndl-lab/ndlkotenocr-lite/ede4283845cdc0ba2bda8b7ebfc3dc80b33c92c8/src/model/rtmdet-s-1280x1280.onnx",
+      "license": "CC-BY-4.0",
+      "license_url": "https://github.com/ndl-lab/ndlkotenocr-lite/blob/ede4283845cdc0ba2bda8b7ebfc3dc80b33c92c8/LICENCE"
+    }
+  ]
+}

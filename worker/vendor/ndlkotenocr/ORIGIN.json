@@ -1,0 +1,30 @@
+{
+  "source": "https://github.com/ndl-lab/ndlkotenocr-lite",
+  "revision": "ede4283845cdc0ba2bda8b7ebfc3dc80b33c92c8",
+  "changes": "Unmodified runtime subset; training, GUI, samples and model weights excluded.",
+  "files": {
+    "LICENCE": "12538e73c4a1e05fc0c0b75d9d4de657f139d94ebc5f44b03a84cc1f793358f0",
+    "LICENCE_DEPENDENCEIES": "64bb28e9950e3810e05538477b0725032068482a6a38e314cc20ba8e34d6b535",
+    "src/config/NDLmoji.yaml": "775eb37e6b09ad0a97b762d48c916c60e7ce8879a4628ddb190ce037d0a15772",
+    "src/config/ndl.yaml": "c11eacb3eae84bab0222c61a9ce14f885d281f8aaee2c72d3104e2030ba964f9",
+    "src/ndl_parser.py": "3df1bc64896fb4e41de4782fd2e3cec49c7639de151676aa80639773bd686529",
+    "src/parseq.py": "3c08fe27063ff1afee2ab9f830075283bf9c4e60e2fd57a75c6408b32c54698a",
+    "src/reading_order/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/reading_order/order/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/reading_order/order/parse_xml.py": "5b3929d5359a74b2acf21ada5fa2c0a422c47459c086c2710f86d40e9cbb79a8",
+    "src/reading_order/order/reorder.py": "6a885ba72357e9a0f18782121f274f42c52498b0e5b49143f4b46e1f9e315d3f",
+    "src/reading_order/order/smooth_order.py": "e65da8b03e989d850c1dfaa391c6b5bd158de5c8a3caddfa4ba59ef86b1feab3",
+    "src/reading_order/order/warichu_block.py": "50a31488e86c338078b366c0d506584949fbbbb7970e0cc2cb58069c883a3012",
+    "src/reading_order/order/wrap_dataset.py": "57e3f2e9c4fe2bb4bf7ac96416634509b5f1f76911f59e178d65e1f93986eada",
+    "src/reading_order/utils/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/reading_order/utils/file.py": "8a8f27d3babe228417421a94914e5df953c7384935475e43411281c061f89e87",
+    "src/reading_order/utils/logger.py": "b4b18f9d7a3a7cc84ee34568622c30d721d418d571129430b5ecd2a7a6d9aee0",
+    "src/reading_order/utils/time.py": "38936d312df9298d82196eaefd54c67fd1cfa68fdb51421669bc99bd211d6eeb",
+    "src/reading_order/utils/xml.py": "4f2660326e3d3f20aa8ea94544ade6d6041ec11731fb5feca6c66e8289bb9efa",
+    "src/reading_order/xy_cut/.ipynb_checkpoints/eval-checkpoint.py": "34dd5d88bed29b3d054470ed7777995ed098eb6d122d64548d04bcfe3d26ac30",
+    "src/reading_order/xy_cut/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/reading_order/xy_cut/block_xy_cut.py": "5c5790d0a85beff5c1a1246e0369daa9a15a12f50e312f1e9b0e332d74b34f94",
+    "src/reading_order/xy_cut/eval.py": "34dd5d88bed29b3d054470ed7777995ed098eb6d122d64548d04bcfe3d26ac30",
+    "src/rtmdet.py": "64be922293f669290c7dfbdea091dd88806159fd7471e0073ef40cd1b2f64cff"
+  }
+}

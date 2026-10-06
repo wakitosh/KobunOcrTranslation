@@ -1,0 +1,244 @@
+.kobun-reading {
+  margin: 0 0 1.25rem;
+  padding: 1rem;
+  border: 1px solid #c8d4cd;
+  border-radius: .5rem;
+  background: #f8fbf9;
+  color: #18251e;
+}
+.kobun-reading [hidden] { display: none !important; }
+.kobun-reading__modal-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.kobun-reading__modal-heading h2 { margin: .15rem 0; font-size: 1.45rem; }
+.kobun-reading__eyebrow {
+  margin: 0;
+  color: #476457;
+  font-size: .8rem;
+  font-weight: 700;
+  letter-spacing: .12em;
+}
+.kobun-reading__state {
+  display: inline-block;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 12rem;
+  margin-left: auto;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  padding: .35rem .6rem;
+  border-radius: 999px;
+  background: #e5e8e6;
+  font-size: .7rem;
+  font-weight: 700;
+  line-height: 1.15;
+}
+.kobun-reading__state.is-published { background: #dcefe1; color: #174b28; }
+.kobun-reading__state.is-machine { background: #fff0c7; color: #684a00; }
+.kobun-reading__controls {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 1rem;
+  flex-wrap: nowrap;
+}
+.kobun-reading button {
+  min-height: 2rem;
+  padding: .55rem .9rem;
+  margin-bottom: .375rem;
+  border: 0;
+  border-radius: .25rem;
+  background: #1e6241;
+  color: #fff;
+  font: inherit;
+  font-size: .875rem;
+  font-weight: 400;
+  cursor: pointer;
+}
+.kobun-reading button:disabled { opacity: .55; cursor: wait; }
+.kobun-reading__start { flex: 0 0 auto; white-space: nowrap; }
+.kobun-reading__message { margin-top: .75rem; font-weight: 400; font-size: .875rem; }
+.kobun-reading__message:empty { display: none; }
+.kobun-reading__credit {
+  margin: .6rem 0 0;
+  text-align: right;
+  color: #617067;
+  font-size: .8rem;
+}
+.kobun-reading__dialog {
+  position: fixed;
+  z-index: 10000;
+  inset: 1rem 1rem auto auto;
+  width: min(34rem, calc(50vw - 1.5rem));
+  min-width: min(20rem, calc(100vw - 2rem));
+  height: min(42rem, calc(100vh - 2rem));
+  min-height: 16rem;
+  max-width: calc(100vw - 2rem);
+  max-height: calc(100vh - 2rem);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: .5rem;
+  box-shadow: 0 1rem 4rem #0006;
+  color: #18251e;
+  overflow: auto;
+  resize: both;
+  font-size: .875rem;
+}
+.kobun-reading__dialog[open] { display: block; }
+.kobun-reading__modal-heading {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  padding: 1.25rem 1.5rem 1rem;
+  background: #f8fbf9;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.kobun-reading__modal-heading.is-dragging { cursor: grabbing; }
+.kobun-reading .kobun-reading__close {
+  min-width: 2.75rem;
+  padding: .2rem;
+  background: transparent;
+  color: #283a31;
+  font-size: 1.8rem;
+  line-height: 1;
+}
+.kobun-reading__quality {
+  margin: .75rem 1.5rem 0;
+  padding: .75rem;
+  border-left: 4px solid #b38824;
+  background: #fff8e7;
+}
+.kobun-reading__responsibility {
+  margin: .65rem 1.5rem;
+  color: #35483e;
+  font-size: .9rem;
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+.kobun-reading__attribution {
+  margin:.75rem 1.5rem 0;
+  padding:1rem;
+  border:1px solid #c8d4cd;
+  background:#f8fbf9;
+}
+.kobun-reading__attribution h3 { margin:0 0 .75rem; font-size:1rem; }
+.kobun-reading__attribution dl { display:grid; grid-template-columns:max-content minmax(0,1fr); gap:.35rem 1rem; margin:0; }
+.kobun-reading__attribution dt { color:#52645a; font-size:.8rem; font-weight:700; }
+.kobun-reading__attribution dd { margin:0; white-space:pre-line; overflow-wrap:anywhere; }
+.kobun-reading__progress {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+  margin: .75rem 1.5rem 0;
+  padding: .65rem .75rem;
+  border-radius: .25rem;
+  background: #eef5f0;
+  color: #254535;
+}
+.kobun-reading__progress span {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+  border: 2px solid #6f927c;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: kobun-reading-spin .8s linear infinite;
+}
+@keyframes kobun-reading-spin { to { transform: rotate(360deg); } }
+.kobun-reading__tabs {
+  display: flex;
+  gap: .25rem;
+  margin: 1.25rem 1.5rem 0;
+  border-bottom: 1px solid #c8d4cd;
+}
+.kobun-reading .kobun-reading__tab {
+  margin-bottom: -1px;
+  border: 1px solid transparent;
+  border-bottom-color: #c8d4cd;
+  border-radius: .3rem .3rem 0 0;
+  background: #e8eeea;
+  color: #253b30;
+}
+.kobun-reading .kobun-reading__tab.is-active {
+  border-color: #c8d4cd;
+  border-bottom-color: #fff;
+  background: #fff;
+  color: #174b28;
+}
+.kobun-reading__tabpanel {
+  font-size: 1rem;
+  min-height: 12rem;
+  padding: 1.25rem 1.5rem;
+  overflow: auto;
+  background: #fff;
+}
+.kobun-reading__tabpanel[hidden] { display: none; }
+.kobun-reading__transcription p { margin: .25em 0; line-height: 1.9; }
+.kobun-reading__transcription.is-vertical {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: .75rem;
+  min-height: 24rem;
+  overflow: auto;
+}
+.kobun-reading__transcription.is-vertical.reading-rtl { flex-direction: row-reverse; }
+.kobun-reading__transcription p.is-vertical {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  white-space: nowrap;
+}
+.kobun-reading__transcription.is-vertical p.is-vertical {
+  flex: 0 0 auto;
+  margin: 0;
+}
+.kobun-reading__transcription.is-vertical p.is-horizontal {
+  flex: 0 0 12rem;
+  writing-mode: horizontal-tb;
+  white-space: normal;
+}
+.kobun-reading__translation { white-space: pre-wrap; line-height: 1.9; }
+.kobun-reading__external-status { font-size: .85rem; line-height: 1.6; padding: .5rem; background: #eef5f0; }
+.kobun-reading__external-status:empty { display: none; }
+.kobun-reading__translation-actions { display: flex; flex-wrap: wrap; gap: .4rem; }
+.kobun-reading__dialog .kobun-llm details { margin: 0; padding: 0; border: 1px solid #c8d4cd; background: #f8fbf9; }
+.kobun-reading__model { color: #617067; font-size: .8rem; overflow-wrap: anywhere; }
+.kobun-reading__warning { padding: .5rem; background: #fff3cd; }
+.kobun-reading__dialog details {
+  margin: 0;
+  padding: 1rem 1.5rem 1.5rem;
+  border-top: 1px solid #dbe3de;
+  background: #fff;
+}
+.kobun-reading__dialog summary { cursor: pointer; }
+.kobun-reading__warnings {
+  font-size: .875rem;
+}
+
+@media (max-width: 540px) {
+  .kobun-reading__controls { gap: .5rem; }
+  .kobun-reading__state { max-width: 7.5rem; font-size: .65rem; }
+  .kobun-reading__dialog {
+    inset: .5rem .5rem auto auto;
+    width: calc(100vw - 1rem);
+    max-width: calc(100vw - 1rem);
+    height: min(36rem, calc(100vh - 1rem));
+    max-height: calc(100vh - 1rem);
+  }
+  .kobun-reading__modal-heading,
+  .kobun-reading__tabpanel { padding-left: 1rem; padding-right: 1rem; }
+  .kobun-reading__tabs,
+  .kobun-reading__quality,
+  .kobun-reading__responsibility,
+  .kobun-reading__attribution,
+  .kobun-reading__progress { margin-left: 1rem; margin-right: 1rem; }
+  .kobun-reading__attribution dl { grid-template-columns:1fr; gap:.15rem; }
+  .kobun-reading__attribution dd { margin-bottom:.45rem; }
+}

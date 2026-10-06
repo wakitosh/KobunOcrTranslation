@@ -1,0 +1,149 @@
+/* Adapted from honkoku-ocr-web, Yuta Hashimoto, CC BY 4.0. See THIRD_PARTY_NOTICES.md. */
+.viewer-wrap {
+  flex: 1 1 auto;
+  position: relative;
+  min-height: 0;
+  overflow: hidden;                /* 選択 bbox / ホバーポップアップが隣の UI に被らないように */
+  background: #263238;
+}
+.osd-root { position: absolute; inset: 0; }
+/* z-index:0 で stacking context を作り、OSD 内部要素が編集レイヤー(z>0)より前に出ないようにする */
+.osd-host { position: absolute; inset: 0; z-index: 0; }
+
+/* 選択行の編集レイヤー（移動面 + リサイズハンドル + 削除ボタン） */
+/* 領域選択（範囲指定レイアウト/削除） */
+.osd-select-region, .osd-select-draw {
+  position: absolute; pointer-events: none;
+  border: 2px dashed #e0a800;
+  background: rgba(224, 168, 0, 0.12);
+  border-radius: 2px;
+}
+.osd-select-region { z-index: 36; }
+.osd-select-draw { z-index: 46; background: rgba(224, 168, 0, 0.18); }
+
+.edit-layer { position: absolute; z-index: 40; }
+.edit-move {
+  position: absolute; inset: 0;
+  cursor: move;
+  border: 2px solid var(--accent-strong);
+  background: rgba(25, 118, 210, 0.10);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6);
+  touch-action: none;              /* タッチドラッグでブラウザ既定のスクロール/ズームを発動させない */
+}
+.edit-h {
+  position: absolute;
+  width: 12px; height: 12px;
+  background: #fff;
+  border: 2px solid var(--accent-strong);
+  border-radius: 2px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  touch-action: none;              /* リサイズハンドルも同様にブラウザのデフォルトジェスチャを抑止 */
+}
+.edit-nw { left: -6px; top: -6px; cursor: nwse-resize; }
+.edit-n  { left: 50%; top: -6px; transform: translateX(-50%); cursor: ns-resize; }
+.edit-ne { right: -6px; top: -6px; cursor: nesw-resize; }
+.edit-e  { right: -6px; top: 50%; transform: translateY(-50%); cursor: ew-resize; }
+.edit-se { right: -6px; bottom: -6px; cursor: nwse-resize; }
+.edit-s  { left: 50%; bottom: -6px; transform: translateX(-50%); cursor: ns-resize; }
+.edit-sw { left: -6px; bottom: -6px; cursor: nesw-resize; }
+.edit-w  { left: -6px; top: 50%; transform: translateY(-50%); cursor: ew-resize; }
+.edit-del {
+  position: absolute; top: -13px; left: -13px;
+  width: 24px; height: 24px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--hand); color: #fff;
+  border: 2px solid #fff; border-radius: 50%;
+  font-size: 15px; line-height: 1; cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+}
+
+.edit-hint { font-size: 0.74rem; color: var(--muted); margin-left: 4px; }
+
+/* ホバー時の行翻刻ポップアップ。文字方向は各OCR行枠に追従する。 */
+.osd-popup {
+  position: absolute;
+  z-index: 60;
+  pointer-events: none;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 4px;
+  max-height: calc(100% - 8px);
+  padding: 8px 10px;
+  background: rgba(43, 43, 43, 0.95);
+  color: #fff;
+  border-radius: 6px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+.osd-popup-text {
+  white-space: nowrap;
+  font-size: 17px;
+  line-height: 1.7;
+}
+.osd-popup.is-vertical .osd-popup-text { writing-mode: vertical-rl; text-orientation: mixed; }
+.osd-popup.is-horizontal { flex-direction: column; max-width: calc(100% - 8px); max-height: none; }
+.osd-popup.is-horizontal .osd-popup-text { writing-mode: horizontal-tb; }
+.osd-popup-no {
+  flex: 0 0 auto;
+  font-size: 11px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 8px;
+  padding: 1px 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ----- OSD オーバーレイ ----- */
+.osd-line {
+  pointer-events: auto;
+  border: 1.5px solid var(--hand);
+  background: rgba(211, 47, 47, 0.10);
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.osd-line.osd-line-type {
+  border-color: var(--type);
+  background: rgba(0, 137, 123, 0.10);
+}
+.osd-line:hover { background: rgba(211, 47, 47, 0.22); }
+.osd-line.osd-line-type:hover { background: rgba(0, 137, 123, 0.22); }
+.osd-line.selected {
+  background: rgba(25, 118, 210, 0.30) !important;
+  border-color: var(--accent-strong);
+  box-shadow: 0 0 0 2px rgba(25,118,210,0.4);
+}
+.osd-order {
+  position: absolute;
+  /* bbox の少し上・中央（選択時の編集ボックスと重ならないように） */
+  bottom: 100%;
+  left: 50%;
+  transform: translate(-50%, -4px);
+  min-width: 18px; height: 18px;
+  padding: 0 5px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+  border-radius: 9px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+.osd-region {
+  pointer-events: none;
+  border: 1.5px dashed var(--region);
+  background: rgba(237, 108, 2, 0.06);
+  border-radius: 2px;
+}
+.osd-region-label {
+  position: absolute;
+  top: 2px; left: 2px;
+  background: var(--region);
+  color: #fff;
+  font-size: 10px;
+  padding: 0 5px;
+  border-radius: 3px;
+}

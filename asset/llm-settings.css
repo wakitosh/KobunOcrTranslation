@@ -1,0 +1,21 @@
+.kobun-llm { margin: .75rem 0; font-size: .875rem; color: #263a30; }
+.kobun-llm [hidden] { display: none !important; }
+.kobun-llm details { border: 1px solid #c8d4cd; border-radius: .3rem; background: #f8fbf9; }
+.kobun-llm summary { padding: .75rem; cursor: pointer; font-weight: 600; overflow-wrap: anywhere; }
+.kobun-llm form { padding: 0 .75rem .75rem; }
+.kobun-llm form > label, .kobun-llm [data-commercial] > label, .kobun-llm [data-passphrase] > label { display: block; margin: .75rem 0 .25rem; font-weight: 600; }
+.kobun-llm input:not([type="radio"]), .kobun-llm select { display: block; box-sizing: border-box; width: 100%; min-width: 0; padding: .6rem; height: auto; margin: 0; border: 1px solid #b7c7be; border-radius: .25rem; background: #fff; color: #18251e; font: inherit; font-weight: 400; }
+.kobun-llm fieldset { margin: .75rem 0; padding: .65rem; border: 1px solid #c8d4cd; }
+.kobun-llm legend { font-size: .875rem; font-weight: 600; }
+.kobun-llm label.kobun-llm__choice { display: grid; grid-template-columns: 1.2rem 1fr; gap: .2rem .5rem; padding: .5rem 0; font-weight: 400; cursor: pointer; }
+.kobun-llm__choice input { width: auto; margin: .2rem 0 0; }
+.kobun-llm__choice small { grid-column: 2; font-size: .8rem; color: #52645a; }
+.kobun-llm__hint, .kobun-llm__notice { margin: .5rem 0; line-height: 1.6; font-size: .8rem; }
+.kobun-llm__notice { padding: .65rem; background: #fff5d9; }
+.kobun-llm__actions { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .75rem; }
+.kobun-llm .kobun-llm__actions button { margin: 0; padding: .5rem .7rem; border: 1px solid #b7c7be; border-radius: .25rem; color: #174b28; background: #fff; font: inherit; font-weight: 400; cursor: pointer; }
+.kobun-llm .kobun-llm__actions button[type="submit"] { color: #fff; background: #1e6241; }
+.kobun-llm__status { margin: .6rem 0 0; font-size: .8rem; overflow-wrap: anywhere; }
+.kobun-llm__status:empty { display: none; }
+.kobun-llm input:focus-visible, .kobun-llm select:focus-visible, .kobun-llm button:focus-visible, .kobun-llm summary:focus-visible { outline: 2px solid #267b53; outline-offset: 2px; }
+.kobun-llm input:disabled, .kobun-llm select:disabled { background: #edf1ee; color: #627169; cursor: not-allowed; }

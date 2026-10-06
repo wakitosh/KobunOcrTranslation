@@ -1,0 +1,35 @@
+<?php
+use KobunOcrTranslation\VisitorLlmPolicy;
+$prefix = VisitorLlmPolicy::SETTING;
+?>
+<fieldset id="kobun-visitor-llm-policy">
+  <legend>訪問者の現代語訳設定</legend>
+  <p>全サイトの公開画面に適用します。現代語訳全体の有効・無効は各サイトの設定で指定してください。管理者の編集画面のLLM設定には適用しません。</p>
+  <?php foreach (VisitorLlmPolicy::CONTROLS as $name => $label): ?>
+  <div class="field"><div class="field-meta"><label for="kobun-policy-<?= $name ?>"><?= $this->escapeHtml($label) ?></label></div><div class="inputs">
+    <input type="checkbox" id="kobun-policy-<?= $name ?>" name="<?= $prefix ?>[<?= $name ?>]" value="1"<?= $policy[$name] ? ' checked' : '' ?>>
+  </div></div>
+  <?php endforeach; ?>
+  <?php foreach (['providers' => ['利用できるLLM', VisitorLlmPolicy::PROVIDERS], 'storage_modes' => ['利用できる保存方法', VisitorLlmPolicy::STORAGE]] as $name => [$label, $choices]): ?>
+  <div class="field"><div class="field-meta"><label><?= $label ?></label></div><div class="inputs">
+    <?php foreach ($choices as $value => $choice): ?>
+    <label style="display:block;font-weight:400"><input type="checkbox" name="<?= $prefix ?>[<?= $name ?>][]" value="<?= $value ?>"<?= in_array($value, $policy[$name], true) ? ' checked' : '' ?>> <?= $this->escapeHtml($choice) ?></label>
+    <?php endforeach; ?>
+  </div></div>
+  <?php endforeach; ?>
+  <?php foreach (['default_provider' => ['LLMの初期値・固定値', VisitorLlmPolicy::PROVIDERS], 'default_storage' => ['保存方法の初期値・固定値', VisitorLlmPolicy::STORAGE]] as $name => [$label, $choices]): ?>
+  <div class="field"><div class="field-meta"><label for="kobun-policy-<?= $name ?>"><?= $label ?></label></div><div class="inputs">
+    <select id="kobun-policy-<?= $name ?>" name="<?= $prefix ?>[<?= $name ?>]">
+      <?php foreach ($choices as $value => $choice): ?><option value="<?= $value ?>"<?= $policy[$name] === $value ? ' selected' : '' ?>><?= $this->escapeHtml($choice) ?></option><?php endforeach; ?>
+    </select>
+  </div></div>
+  <?php endforeach; ?>
+  <?php foreach ($policy['models'] as $provider => $model): ?>
+  <div class="field"><div class="field-meta"><label for="kobun-policy-model-<?= $provider ?>"><?= $this->escapeHtml(VisitorLlmPolicy::PROVIDERS[$provider]) ?> のモデルID初期値・固定値</label></div><div class="inputs">
+    <input type="text" id="kobun-policy-model-<?= $provider ?>" name="<?= $prefix ?>[models][<?= $provider ?>]" value="<?= $this->escapeHtmlAttr($model) ?>" maxlength="120" pattern="[a-zA-Z0-9._-]*">
+  </div></div>
+  <?php endforeach; ?>
+  <p>選択・変更を許可しない項目は初期値に固定します。設定フォームを非表示にする場合もLLM・保存方法・モデルを固定します。モデル変更を禁止した場合は、訪問者が利用できる各商用LLMのモデルIDを入力してください。ローカルLLMに固定する場合は商用モデルIDは不要です。APIキーは管理者設定には保存しません。</p>
+  <p>APIキー入力を禁止した場合は、許可範囲内の登録済みキーだけを利用できます。フォーム表示中のロック解除と、端末の保存設定・キーの消去は制限しません。フォームを非表示にしても消去ボタンは残します。未登録のキーや暗号化保存された未解除のキーは、フォーム非表示中には利用できません。</p>
+  <p>例：ローカルLLMだけなら「利用できるLLM」をローカルだけにします。「このブラウザに保存」だけを選択可にする場合は、他の保存方法を外し、保存方法の初期値を「このブラウザに保存」にします。変更前の保存設定が許可範囲外の場合、そのキーを自動転用せず再登録を求めます。</p>
+</fieldset>

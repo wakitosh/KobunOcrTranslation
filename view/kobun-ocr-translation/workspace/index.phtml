@@ -1,0 +1,16 @@
+<?php
+$this->headLink()->appendStylesheet($this->assetUrl('dist/workspace.css', 'KobunOcrTranslation'));
+$this->headScript()->appendFile($this->assetUrl('dist/workspace.js', 'KobunOcrTranslation'), 'module');
+?>
+<?= $this->pageTitle('古典籍 OCR・現代語訳', 2) ?>
+<div id="kobun-workspace"
+     data-proxy="<?= $this->escapeHtmlAttr($this->url('admin/kobun-ocr', ['action' => 'proxy'])) ?>"
+     data-pages="<?= $this->escapeHtmlAttr($this->url('admin/kobun-ocr', ['action' => 'pages'])) ?>"
+     data-import-url="<?= $this->escapeHtmlAttr($this->url('admin/kobun-ocr', ['action' => 'import'])) ?>"
+     data-csrf="<?= $this->escapeHtmlAttr($csrf) ?>"
+     data-can-manage="<?= $canManageWorkflow ? '1' : '0' ?>"
+     data-can-edit-transcription="<?= $canEditTranscription ? '1' : '0' ?>"
+     data-preferred-model="<?= $this->escapeHtmlAttr($preferredModel) ?>"
+     data-transcription-scope="<?= $this->escapeHtmlAttr($transcriptionScope) ?>">
+    <p>ワークスペースを読み込んでいます。</p>
+</div>

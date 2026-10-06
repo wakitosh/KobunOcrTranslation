@@ -1,0 +1,6 @@
+[
+  {"id":"hearing-negation","kind":"constructed-holdout","text":"里人の呼べども、翁は耳遠ければ、聞かざりけり。","criteria":["村人が呼んだこと","老人は耳が遠いので聞こえなかったこと","意図的に無視した話にしない"]},
+  {"id":"mother-not-returned","kind":"constructed-holdout","text":"文を見せば母も喜ばむと思へど、いまだ帰り給はず。","criteria":["手紙を見せたら母も喜ぶだろうという未実現の予想","まだ帰っていないという否定","帰った・手紙を見せたという完了にしない"]},
+  {"id":"flowers-comparison","kind":"constructed-holdout","text":"花の色は去年にも劣らず。されど、訪ふ人は少なくなりぬ。","criteria":["花の色は去年に劣らない","それでも訪問者は減ったという完了","花の色も衰えたとしない"]},
+  {"id":"bridge-conditional","kind":"constructed-holdout","text":"いかでこの橋を渡らむ。水増さば舟を待つべし。","criteria":["どうやって橋を渡ろうかという疑問","水が増えたら舟を待つという条件","舟で渡り終えたとしない"]}
+]

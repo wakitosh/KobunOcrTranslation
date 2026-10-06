@@ -1,0 +1,28 @@
+node_modules/
+__pycache__/
+*.pyc
+test-results/
+
+# Local runtime, browser test artifacts and downloaded model weights.
+/var/
+/runtime/
+/models/
+venv/
+.venv/
+playwright-report/
+blob-report/
+*.gguf
+*.onnx
+*.log
+*.sqlite
+*.sqlite3
+*.db
+
+# Machine-specific files and credentials.
+.DS_Store
+.env
+.env.*
+!.env.example
+backend-token
+*.pem
+*.key

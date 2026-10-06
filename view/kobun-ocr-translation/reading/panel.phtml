@@ -1,0 +1,58 @@
+<?php
+$site = $this->currentSite();
+$route = ['site-slug' => $site->slug()];
+$pageData = json_encode($pages, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
+$dialogId = 'kobun-reading-dialog-' . bin2hex(random_bytes(4));
+?>
+<link rel="stylesheet" href="<?= $this->escapeHtmlAttr($this->assetUrl('reading.css', 'KobunOcrTranslation')) ?>">
+<?php if ($translationEnabled): ?><link rel="stylesheet" href="<?= $this->escapeHtmlAttr($this->assetUrl('llm-settings.css', 'KobunOcrTranslation')) ?>"><?php endif; ?>
+<section class="kobun-reading"
+    data-start="<?= $this->escapeHtmlAttr($this->url('kobun-ocr-reading', $route + ['action' => 'start'])) ?>"
+    data-status="<?= $this->escapeHtmlAttr($this->url('kobun-ocr-reading', $route + ['action' => 'status'])) ?>"
+    data-run="<?= $this->escapeHtmlAttr($this->url('kobun-ocr-reading', $route + ['action' => 'run'])) ?>"
+    data-csrf="<?= $this->escapeHtmlAttr($csrf) ?>" data-translation="<?= $translationEnabled ? '1' : '0' ?>"
+    data-llm-policy="<?= $this->escapeHtmlAttr(json_encode($visitorLlmPolicy, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT)) ?>"
+    data-pages="<?= $this->escapeHtmlAttr($pageData) ?>">
+  <div class="kobun-reading__controls">
+    <button type="button" class="kobun-reading__start" disabled>このページを翻刻する</button>
+    <span class="kobun-reading__state" title="実行前">実行前</span>
+  </div>
+  <div class="kobun-reading__message" role="status" aria-live="polite"></div>
+  <p class="kobun-reading__credit">OCR: NDL古典籍OCR-Lite</p>
+
+  <dialog class="kobun-reading__dialog" id="<?= $this->escapeHtmlAttr($dialogId) ?>" aria-modal="false" aria-labelledby="<?= $this->escapeHtmlAttr($dialogId) ?>-title">
+    <div class="kobun-reading__modal-heading" data-drag-handle>
+      <div><p class="kobun-reading__eyebrow">閲覧支援結果</p><h2 id="<?= $this->escapeHtmlAttr($dialogId) ?>-title" class="kobun-reading__modal-title">翻刻</h2></div>
+      <button type="button" class="kobun-reading__close" aria-label="閉じる">×</button>
+    </div>
+    <div class="kobun-reading__quality"></div>
+    <?php if ($translationEnabled): ?><div class="kobun-reading__tabs" role="tablist" aria-label="閲覧支援結果">
+      <button type="button" role="tab" class="kobun-reading__tab is-active" data-tab="transcription" aria-selected="true">翻刻</button>
+      <button type="button" role="tab" class="kobun-reading__tab" data-tab="translation" aria-selected="false">現代語訳</button>
+    </div><?php endif; ?>
+    <div class="kobun-reading__progress" role="status" aria-live="polite" hidden><span aria-hidden="true"></span><b></b></div>
+    <section class="kobun-reading__tabpanel" data-panel="transcription" role="tabpanel">
+      <div class="kobun-reading__transcription"></div>
+    </section>
+    <?php if ($translationEnabled): ?><section class="kobun-reading__tabpanel" data-panel="translation" role="tabpanel" hidden>
+      <div class="kobun-reading__llm-settings"></div>
+      <p class="kobun-reading__external-status" role="status" aria-live="polite"></p>
+      <div class="kobun-reading__translation-empty">
+        <p class="kobun-reading__translation-empty-message">現代語訳は保存されていません。</p>
+      </div>
+      <div class="kobun-reading__translation-actions"><button type="button" class="kobun-reading__translate" hidden>実験的な現代語訳を作る</button>
+        <button type="button" class="kobun-reading__cancel-translation" hidden>生成を中止</button>
+        <button type="button" class="kobun-reading__clear-private" hidden>自分用の訳を消去</button></div>
+      <div class="kobun-reading__translation" hidden></div>
+      <p class="kobun-reading__model" hidden></p>
+      <div class="kobun-reading__warnings"></div>
+    </section><?php endif; ?>
+    <section class="kobun-reading__attribution" aria-labelledby="<?= $this->escapeHtmlAttr($dialogId) ?>-attribution" hidden>
+      <h3 id="<?= $this->escapeHtmlAttr($dialogId) ?>-attribution">この翻刻の作成・権利情報</h3>
+      <dl></dl>
+    </section>
+    <p class="kobun-reading__responsibility" hidden></p>
+    <details class="kobun-reading__provenance-details"><summary>生成情報と注意事項</summary><p>OCR: NDL古典籍OCR-Lite</p><p>「機械生成・未確認」の結果には、OCR誤認識や誤訳が含まれます。資料画像と照合してご利用ください。確認済みデータも研究上の校訂本文を意味するものではありません。</p></details>
+  </dialog>
+</section>
+<script src="<?= $this->escapeHtmlAttr($this->assetUrl('reading.js', 'KobunOcrTranslation')) ?>" type="module"></script>

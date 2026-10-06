@@ -1,0 +1,14 @@
+#kobun-service-control .kobun-service-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .5rem 1rem;
+  padding: .75rem 0;
+  border-bottom: 1px solid #ddd;
+}
+#kobun-service-control .kobun-service-row strong { min-width: 8rem; }
+#kobun-service-control .kobun-service-status { flex: 1 1 18rem; }
+#kobun-service-control .kobun-service-actions { display: inline-flex; gap: .35rem; }
+#kobun-service-control button { cursor: pointer; }
+#kobun-service-control button:disabled { cursor: not-allowed; }
+#kobun-service-message { min-height: 1.5em; }
