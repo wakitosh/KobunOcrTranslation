@@ -7,13 +7,13 @@
 - Omeka：`/opt/omeka-s`。PHP-FPM/httpdの実行ユーザ：`limewww`、主グループ：`library`
 - RHEL 9.7、CPU 64論理コア、メモリ251GiB。確認時の `/opt` を含むファイルシステムの空きは約53GiB
 - Python 3.9は既存。Python 3.11、pip、Git、CMake、libcurl-develは未導入。gcc-c++、make、ACLツールは既存
-- SELinuxはDisabled、8765～8767番は未使用、モジュールとバックエンドは未設置
+- SELinuxはDisabled、TCP/8765～8767番は未使用、モジュールとバックエンドは未設置
 
 これらは確認時点の値です。処理負荷・9Bの必要メモリ・訳質を測定したものではありません。実機で確認済みなのは計画表示だけで、導入・ビルド・推論はまだ実施していません。
 
 ## 1. GitHubからモジュールを取得
 
-以下のcloneは、既存のmodulesディレクトリに書ける `wakit` 等の通常ユーザで実行します。既存ディレクトリがある場合は上書きせず確認してください。
+以下のcloneは、既存のmodulesディレクトリに書ける通常ユーザで実行します。既存ディレクトリがある場合は上書きせず確認してください。
 
 ```sh
 sudo dnf install -y git
@@ -79,7 +79,7 @@ sudo systemctl status kobun-ocr-control.service
 sudo journalctl -u kobun-ocr-control.service -n 100
 ```
 
-モジュール更新時は、処理完了後にブラウザでworkerとLLMを停止し、運用業者が`sudo systemctl stop kobun-ocr-control.service`を実行します。Git checkoutで`git pull --ff-only`し、インストーラを同じ引数で再実行すると実行用コピーも更新します。常駐サービスの再起動・停止は配下のworker・LLMも停止させるため、再開時はブラウザから起動します。
+モジュール更新時は、処理完了後にブラウザでworkerとLLMを停止し、`sudo systemctl stop kobun-ocr-control.service`を実行します。Git checkoutで`git pull --ff-only`し、インストーラを同じ引数で再実行すると実行用コピーも更新します。常駐サービスの再起動・停止は配下のworker・LLMも停止させるため、再開時はブラウザから起動します。
 
 利用を止める場合は同じ手順で処理を止め、`sudo systemctl disable --now kobun-ocr-control.service`を実行します。Omekaでモジュールを無効化します。保存データ・モデル・ユーザは削除しません。バックアップ対象は非公開の`runtime`（特に`data`、`config.json`、トークン）とします。
 
