@@ -8,7 +8,7 @@
 }
 .kobun-reading [hidden] { display: none !important; }
 .kobun-reading__cache { margin: 1rem; padding: .75rem; border: 1px solid #c8d4cd; border-radius: .25rem; }
-.kobun-reading__cache summary { cursor: pointer; font-weight: 700; }
+.kobun-reading__cache summary { cursor: pointer; }
 .kobun-reading__cache p { font-size: .8rem; line-height: 1.6; }
 .kobun-reading__cache-row { display: flex; align-items: baseline; flex-wrap: wrap; gap: .5rem 1rem; }
 .kobun-reading__cache-row > div { display: flex; flex-wrap: wrap; gap: .5rem; }
@@ -289,7 +289,7 @@
   border-top: 1px solid #dbe3de;
   background: #fff;
 }
-.kobun-reading__dialog summary { cursor: pointer; }
+.kobun-reading .kobun-reading__dialog summary { cursor: pointer; font-weight: 400; }
 .kobun-reading__warnings {
   font-size: .875rem;
 }
