@@ -122,12 +122,24 @@ def make_handler(store, token, config):
                 if parts == ['maintenance'] and self.command == 'POST':
                     self.respond(200, store.set_maintenance(self.body().get('enabled')))
                     return
+                if parts == ['cache-policy']:
+                    if self.command == 'POST':
+                        self.respond(200, store.set_cache_policy(self.body()))
+                        return
+                    if self.command == 'GET':
+                        self.respond(200, store.cleanup_cache())
+                        return
+                if parts == ['private', 'forget'] and self.command == 'POST':
+                    self.respond(200, store.forget_private(self.body()))
+                    return
                 if parts == ["documents"]:
                     if self.command == "GET":
                         self.respond(200, store.list())
                         return
                     if self.command == "POST":
                         source = self.body()
+                        if source.get('workflow') == 'assist_translation':
+                            raise Problem('個人用の訳は翻刻から作成してください。')
                         for key in ("media_id", "item_id"):
                             if type(source.get(key)) is not int or source[key] <= 0:
                                 raise Problem("Media IDとItem IDが必要です。")
@@ -192,6 +204,11 @@ def make_handler(store, token, config):
                             body = self.body()
                             doc = store.manage_cache(ident, body, before_regenerate=require_cache_engine)
                             self.respond(202 if body['action'] == 'regenerate' else 200, doc)
+                            return
+                        if parts[2] == 'private-translation' and self.command == 'POST':
+                            require_translation_ready()
+                            doc, created = store.start_private_translation(ident, self.body())
+                            self.respond(202 if created else 200, doc)
                             return
                         if parts[2] == "jobs" and self.command == "POST":
                             body = self.body()

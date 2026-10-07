@@ -4,6 +4,7 @@ declare(strict_types=1);
 // Use Omeka's installed dependencies, but no application bootstrap, database or network.
 require dirname(__DIR__, 3) . '/vendor/autoload.php';
 require __DIR__ . '/../src/VisitorLlmPolicy.php';
+require __DIR__ . '/../src/ReadingCachePolicy.php';
 require __DIR__ . '/../Module.php';
 require __DIR__ . '/../src/Controller/ReadingController.php';
 
@@ -70,6 +71,7 @@ $controller = new ConfigController();
 $controller->posted = [Policy::SETTING => $policy, 'kobun_ocr_llm_model_profile' => 'qwen35-9b-q4km'];
 $services = new ServiceManager(['services' => [
     'Omeka\Settings' => $settings,
+    'Omeka\AuthenticationService' => new class { public function getIdentity() { return new class { public function getRole() { return 'site_admin'; } }; } },
     'Omeka\Acl' => new class { public function getRoleLabels($all) { return ['global_admin' => 'Admin', 'editor' => 'Editor']; } },
 ]]);
 $module = new \KobunOcrTranslation\Module();

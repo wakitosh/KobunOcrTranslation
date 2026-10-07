@@ -8,6 +8,8 @@ use Laminas\Mvc\Controller\AbstractActionController;
 use Laminas\Session\Container;
 use Laminas\Validator\Csrf;
 use KobunOcrTranslation\VisitorLlmPolicy;
+use KobunOcrTranslation\ReadingScope;
+use KobunOcrTranslation\ReadingCachePolicy;
 
 class PublicRateLimitException extends \RuntimeException
 {
@@ -28,6 +30,19 @@ class PublicRateLimitException extends \RuntimeException
 /** Public, site-scoped access to sanitized reading assistance results. */
 class ReadingController extends AbstractActionController
 {
+    private bool $policySynchronized = false;
+
+    private function cachePolicy(): array
+    {
+        return ReadingCachePolicy::load($this->services()->get('Omeka\Settings'));
+    }
+
+    private function readingScope(): string
+    {
+        $header = $this->getRequest()->getHeaders()->get('X-Kobun-Reading');
+        return ReadingScope::derive($header ? $header->getFieldValue() : '',
+            (string) @file_get_contents($this->options()['token_file']));
+    }
     private function jsonResponse(array $data, int $status = 200)
     {
         $response = $this->getResponse();
@@ -146,6 +161,10 @@ class ReadingController extends AbstractActionController
     private function upstream(string $method, string $endpoint, ?array $body = null)
     {
         $options = $this->options();
+        if (!$this->policySynchronized) {
+            ReadingCachePolicy::synchronize($options, $this->cachePolicy());
+            $this->policySynchronized = true;
+        }
         $token = @file_get_contents($options['token_file']);
         if (!$token) {
             throw new \RuntimeException('閲覧支援は現在利用できません。', 503);
@@ -179,6 +198,9 @@ class ReadingController extends AbstractActionController
         }
         $doc = $this->decode($this->upstream('GET', 'documents/' . $id));
         $source = $doc['source'] ?? [];
+        if (($source['cache_scope'] ?? 'shared') !== 'shared' && ($source['cache_scope'] ?? '') !== $this->readingScope()) {
+            throw new \RuntimeException('結果が見つかりません。', 404);
+        }
         $media = $this->api()->read('media', (int) ($source['media_id'] ?? 0))->getContent();
         $expected = $this->imageSource($media, (string) ($doc['workflow'] ?? 'editorial'));
         if ((int) ($source['item_id'] ?? 0) !== $expected['item_id']
@@ -245,7 +267,7 @@ class ReadingController extends AbstractActionController
         }
     }
 
-    private function publicData(array $doc): array
+    private function publicData(array $doc, ?array $personal = null): array
     {
         $published = ($doc['workflow'] ?? 'editorial') === 'editorial'
             && ($doc['publication_state'] ?? 'draft') === 'published';
@@ -273,7 +295,21 @@ class ReadingController extends AbstractActionController
             ? $savedReadingDirection
             : ($writingDirection === 'vertical' ? 'rtl' : 'ltr');
         $translationEnabled = $this->enabled(true);
-        $translation = $translationEnabled ? ($doc['translation'] ?? null) : null;
+        $translation = $translationEnabled ? ($personal['translation'] ?? $doc['translation'] ?? null) : null;
+        $jobDoc = $personal ?? $doc;
+        $policy = $this->cachePolicy();
+        $shared = ($doc['workflow'] ?? '') === 'assist' && ($doc['source']['cache_scope'] ?? 'shared') === 'shared';
+        $origin = $doc['ocr_generated_at'] ?? $doc['cache_completed_at'] ?? $doc['created_at'] ?? time();
+        $ocrExpiry = $published ? null : $origin + ($shared && isset($doc['ocr_generated_at'])
+            ? $policy['ocr_ttl_hours'] * 3600 : $policy['private_ttl_minutes'] * 60);
+        $translationExpiry = null;
+        if ($translation !== null && ($personal !== null || !$published)) {
+            $translationExpiry = ($personal['translation_generated_at'] ?? $doc['translation_generated_at'] ?? time())
+                + ($personal !== null ? $policy['private_ttl_minutes'] : $policy['translation_ttl_minutes']) * 60;
+            if ($ocrExpiry !== null) $translationExpiry = min($ocrExpiry, $translationExpiry);
+        }
+        $translationScope = $personal !== null ? 'private' : ($published ? 'published'
+            : ($policy['translation_mode'] === 'shared' && $shared ? 'shared' : 'private'));
         return [
             'id' => (string) $doc['id'],
             'quality' => $published ? 'published' : 'machine',
@@ -282,11 +318,11 @@ class ReadingController extends AbstractActionController
             'revision' => (int) ($doc['revision'] ?? 0),
             // A published snapshot stays stable while an administrator starts
             // a new draft operation against the same editorial document.
-            'job' => !$published && isset($doc['job']) ? [
-                'operation' => (string) ($doc['job']['operation'] ?? ''),
-                'status' => (string) ($doc['job']['status'] ?? ''),
-                'error' => (string) ($doc['job']['error'] ?? ''),
-                'phase' => (string) ($doc['job']['phase'] ?? ''),
+            'job' => (!$published || $personal !== null) && isset($jobDoc['job']) ? [
+                'operation' => (string) ($jobDoc['job']['operation'] ?? ''),
+                'status' => (string) ($jobDoc['job']['status'] ?? ''),
+                'error' => (string) ($jobDoc['job']['error'] ?? ''),
+                'phase' => (string) ($jobDoc['job']['phase'] ?? ''),
             ] : null,
             'lines' => $lines,
             'writing_direction' => $writingDirection,
@@ -304,7 +340,12 @@ class ReadingController extends AbstractActionController
                 'warnings' => array_values((array) ($translation['review_warnings'] ?? [])),
             ] : null,
             'translation_available' => $translationEnabled,
-            'can_manage_cache' => ($doc['workflow'] ?? '') === 'assist' && $this->cacheAdministrator() !== null,
+            'can_manage_cache' => $shared && $this->cacheAdministrator() !== null,
+            'can_manage_translation_cache' => $shared && $policy['translation_mode'] === 'shared' && $this->cacheAdministrator() !== null,
+            'translation_scope' => $translationScope,
+            'translation_request_id' => $personal !== null ? (string) $personal['id'] : null,
+            'ocr_expires_at' => $ocrExpiry,
+            'translation_expires_at' => $translationExpiry,
             'provenance' => [
                 'image_sha256' => (string) ($doc['image_sha256'] ?? ''),
                 'operations' => (array) ($doc['provenance'] ?? []),
@@ -330,6 +371,7 @@ class ReadingController extends AbstractActionController
                 }
             }
             $source = $this->imageSource($media, 'assist');
+            $source['cache_scope'] = $this->cachePolicy()['ocr_mode'] === 'shared' ? 'shared' : $this->readingScope();
             $doc = $this->decode($this->upstream('POST', 'documents', $source));
             if (!$doc['lines'] && !in_array($doc['job']['status'] ?? '', ['queued', 'running'], true)) {
                 $doc = $this->submit($doc, 'layout', 'ocr');
@@ -348,7 +390,7 @@ class ReadingController extends AbstractActionController
         } catch (\JsonException | \InvalidArgumentException $e) {
             return $this->jsonResponse(['error' => $e->getMessage()], 400);
         } catch (\Throwable $e) {
-            $status = in_array((int) $e->getCode(), [403, 404, 409, 429, 503], true) ? (int) $e->getCode() : 503;
+            $status = in_array((int) $e->getCode(), [403, 404, 409, 410, 429, 503], true) ? (int) $e->getCode() : 503;
             return $this->jsonResponse(['error' => $e->getMessage() ?: '閲覧支援を開始できません。'], $status);
         }
     }
@@ -360,9 +402,15 @@ class ReadingController extends AbstractActionController
                 throw new \RuntimeException('結果が見つかりません。', 404);
             }
             $doc = $this->readPublicDocument((string) $this->params()->fromQuery('id', ''));
-            return $this->jsonResponse($this->publicData($doc));
+            $personalId = (string) $this->params()->fromQuery('translation_id', '');
+            $personal = $personalId !== '' ? $this->readPublicDocument($personalId) : null;
+            if ($personal !== null && (($personal['workflow'] ?? '') !== 'assist_translation'
+                || ($personal['parent_id'] ?? '') !== $doc['id'])) {
+                throw new \RuntimeException('結果が見つかりません。', 404);
+            }
+            return $this->jsonResponse($this->publicData($doc, $personal));
         } catch (\Throwable $e) {
-            $status = (int) $e->getCode() === 404 ? 404 : 503;
+            $status = in_array((int) $e->getCode(), [403, 404, 410], true) ? (int) $e->getCode() : 503;
             return $this->jsonResponse(['error' => $e->getMessage() ?: '結果を取得できません。'], $status);
         }
     }
@@ -393,6 +441,9 @@ class ReadingController extends AbstractActionController
             if (($doc['workflow'] ?? '') !== 'assist') {
                 throw new \RuntimeException('確認・公開用のデータはキャッシュ操作の対象外です。', 409);
             }
+            if ($body['target'] === 'translation' && $this->cachePolicy()['translation_mode'] !== 'shared') {
+                throw new \RuntimeException('機械現代語訳は閲覧ごとの一時結果として扱います。共有キャッシュはありません。', 403);
+            }
             // Maintenance always uses the library's local engine, independently
             // of the visitor's provider/key and hourly generation allowance.
             $updated = $this->decode($this->upstream('POST', 'documents/' . $doc['id'] . '/cache', [
@@ -405,7 +456,7 @@ class ReadingController extends AbstractActionController
         } catch (\JsonException | \InvalidArgumentException $e) {
             return $this->jsonResponse(['error' => $e->getMessage()], 400);
         } catch (\Throwable $e) {
-            $status = in_array((int) $e->getCode(), [403, 404, 409, 429, 503], true) ? (int) $e->getCode() : 503;
+            $status = in_array((int) $e->getCode(), [403, 404, 409, 410, 429, 503], true) ? (int) $e->getCode() : 503;
             return $this->jsonResponse(['error' => $e->getMessage() ?: 'キャッシュを変更できません。'], $status);
         }
     }
@@ -428,6 +479,27 @@ class ReadingController extends AbstractActionController
                 throw new \RuntimeException('管理者の設定により、公開画面ではローカルLLMを利用できません。', 403);
             }
             $doc = $this->readPublicDocument((string) ($body['id'] ?? ''));
+            $privateTranslation = $operation === 'translate' && ($this->cachePolicy()['translation_mode'] === 'private'
+                || ($doc['source']['cache_scope'] ?? 'shared') !== 'shared'
+                || ($doc['workflow'] ?? 'editorial') === 'editorial');
+            if ($privateTranslation && ($doc['workflow'] ?? '') !== 'assist_translation'
+                && (($doc['workflow'] ?? 'editorial') !== 'editorial' || empty($doc['translation']))) {
+                $scope = $this->readingScope();
+                $this->rateLimit('translation');
+                try {
+                    $response = $this->upstream('POST', 'documents/' . $doc['id'] . '/private-translation', [
+                        'scope' => $scope, 'base_revision' => (int) $doc['revision'],
+                    ]);
+                    $personal = $this->decode($response);
+                    if ($response->getStatusCode() === 200) {
+                        $this->releaseRateLimit('translation');
+                    }
+                } catch (\Throwable $e) {
+                    $this->releaseRateLimit('translation');
+                    throw $e;
+                }
+                return $this->jsonResponse($this->publicData($doc, $personal), 202);
+            }
             if (($doc['workflow'] ?? 'editorial') !== 'assist') {
                 throw new \RuntimeException('確認済みデータに追加処理はできません。', 409);
             }
@@ -453,8 +525,26 @@ class ReadingController extends AbstractActionController
         } catch (\JsonException | \InvalidArgumentException $e) {
             return $this->jsonResponse(['error' => $e->getMessage()], 400);
         } catch (\Throwable $e) {
-            $status = in_array((int) $e->getCode(), [403, 404, 409, 429, 503], true) ? (int) $e->getCode() : 503;
+            $status = in_array((int) $e->getCode(), [403, 404, 409, 410, 429, 503], true) ? (int) $e->getCode() : 503;
             return $this->jsonResponse(['error' => $e->getMessage() ?: '処理を開始できません。'], $status);
+        }
+    }
+
+    public function forgetAction()
+    {
+        try {
+            $body = $this->requirePost();
+            if (count($body) !== 1 || !in_array($body['target'] ?? null, ['translation', 'all'], true)) {
+                throw new \InvalidArgumentException('消去の指定が不正です。');
+            }
+            return $this->jsonResponse($this->decode($this->upstream('POST', 'private/forget', [
+                'scope' => $this->readingScope(), 'target' => $body['target'],
+            ])));
+        } catch (\JsonException | \InvalidArgumentException $e) {
+            return $this->jsonResponse(['error' => $e->getMessage()], 400);
+        } catch (\Throwable $e) {
+            $status = in_array((int) $e->getCode(), [403, 404, 410], true) ? (int) $e->getCode() : 503;
+            return $this->jsonResponse(['error' => $e->getMessage() ?: '一時結果を消去できません。'], $status);
         }
     }
 }

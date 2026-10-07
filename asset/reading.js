@@ -47,6 +47,7 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
     const progress = get('progress'), model = get('model'), responsibility = get('responsibility');
     const attribution = get('attribution'), attributionList = attribution.querySelector('dl');
     const cacheControls = get('cache'), cacheMessage = get('cache-message');
+    const retention = get('retention');
     const cacheButtons = [...root.querySelectorAll('[data-cache-target]')];
     const readingWindow = mountReadingWindow(dialog);
     const tabs = [...root.querySelectorAll('.kobun-reading__tab')];
@@ -54,6 +55,7 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
     let selectedPage = null, current = null, timer = null, advancing = false, unsubscribe = null;
     let externalAbort = null, privateTranslation = null;
     let requestEpoch = 0, cacheBusy = false, cacheJob = null;
+    let localTranslationId = null, localResultId = null;
     let policy;
     try { policy = visitorLlmPolicy(JSON.parse(root.dataset.llmPolicy)); }
     catch { policy = visitorLlmPolicy(null); }
@@ -68,13 +70,15 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
       // existing credential cleanup UI for visitors on shared devices.
       unmountSettings = mountLlmSettings(host, readOnly ? { ...policy, form_enabled: false } : policy);
     };
-    const hasPublishedTranslation = data => data?.quality === 'published' && !!data.translation?.text?.trim();
+    const hasPublishedTranslation = data => data?.quality === 'published' && data.translation_scope !== 'private' && !!data.translation?.text?.trim();
     renderSettings(false);
     const externalStatus = get('external-status'), cancelTranslation = get('cancel-translation'), clearPrivate = get('clear-private');
     const cancelExternal = () => { if (externalAbort) externalAbort.abort(); externalAbort = null; };
     const renderCacheControls = data => {
       if (!cacheControls) return;
       cacheControls.hidden = !(data?.can_manage_cache && data.quality === 'machine' && root.dataset.cache);
+      const translationCache = data?.can_manage_translation_cache ?? (data?.translation_scope === undefined);
+      root.querySelectorAll('[data-translation-cache]').forEach(node => { node.hidden = !translationCache; });
       const busy = cacheBusy || advancing || !!externalAbort || ['queued', 'running'].includes(data?.job?.status);
       if (data) {
         startButton.disabled = busy || !selectedPage;
@@ -84,7 +88,7 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
         const target = button.dataset.cacheTarget, deleting = button.dataset.cacheAction === 'delete';
         const recognized = data?.lines?.length && data.lines.some(line => line.text?.trim());
         button.disabled = busy || cacheControls.hidden || (target === 'translation'
-          ? !data?.translation_available || (deleting ? !data.translation : !recognized)
+          ? !translationCache || !data?.translation_available || (deleting ? !data.translation : !recognized)
           : deleting && !data?.lines?.length);
       });
     };
@@ -92,7 +96,8 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
     const request = async (url, body) => {
       const response = await fetch(url, {
         method: body ? 'POST' : 'GET', credentials: 'same-origin', cache: 'no-store',
-        headers: body ? { 'Content-Type': 'application/json', 'X-Kobun-CSRF': root.dataset.csrf } : {},
+        headers: { 'X-Kobun-Reading': root.dataset.reading,
+          ...(body ? { 'Content-Type': 'application/json', 'X-Kobun-CSRF': root.dataset.csrf } : {}) },
         body: body ? JSON.stringify(body) : undefined
       });
       const data = await response.json().catch(() => ({}));
@@ -100,6 +105,7 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
         const error = new Error(data.error || `通信に失敗しました (${response.status})`);
         error.retryAfter = Number(data.retry_after || 0);
         error.retryAt = Number(data.retry_at || 0);
+        error.expired = response.status === 404 || response.status === 410;
         throw error;
       }
       return data;
@@ -135,7 +141,13 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
       get('modal-title').textContent = name === 'translation' ? '現代語訳' : '翻刻';
     };
     const resetResult = () => {
+      if (current && root.dataset.forget) void request(root.dataset.forget, { target: 'all' }).catch(() => {});
+      // Each canvas gets a new nonce. A delayed cleanup for the previous
+      // canvas cannot delete the next canvas's private work.
+      if (window.crypto?.getRandomValues) root.dataset.reading = [...crypto.getRandomValues(new Uint8Array(32))]
+        .map(value => value.toString(16).padStart(2, '0')).join('');
       requestEpoch++; cacheBusy = false; cacheJob = null;
+      localTranslationId = null; localResultId = null;
       if (cacheMessage) cacheMessage.textContent = '';
       renderCacheControls(null);
       cancelExternal(); privateTranslation = null;
@@ -144,6 +156,7 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
       stop(); current = null; advancing = false; closeDialog();
       setState('実行前');
       setProgress('');
+      if (retention) { retention.hidden = true; retention.textContent = ''; }
       if (model) { model.hidden = true; model.textContent = ''; }
       if (translation) { translation.hidden = true; translation.textContent = ''; warnings.replaceChildren(); }
       transcription.replaceChildren();
@@ -195,6 +208,12 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
 
     const showError = (error, translation = false) => {
       stop(); advancing = false; setProgress('');
+      if (error.expired) {
+        localTranslationId = null;
+        message.textContent = '一時的な結果は期限切れ、または削除されています。「このページを翻刻する」からもう一度実行できます。';
+        setState('一時結果の期限切れ'); startButton.disabled = !selectedPage; startButton.textContent = startLabel;
+        return;
+      }
       if (error.retryAfter > 0) {
         const retryTime = error.retryAt > 0
           ? new Date(error.retryAt * 1000).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })
@@ -223,19 +242,36 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
     const poll = async () => {
       if (!current) return;
       const epoch = requestEpoch, id = current.id, translating = current.job?.operation === 'translate';
-      try { const data = await request(`${root.dataset.status}?id=${encodeURIComponent(id)}`); if (epoch === requestEpoch) render(data); }
+      const personalQuery = localTranslationId ? `&translation_id=${encodeURIComponent(localTranslationId)}` : '';
+      try { const data = await request(`${root.dataset.status}?id=${encodeURIComponent(id)}${personalQuery}`); if (epoch === requestEpoch) render(data); }
       catch (error) { if (epoch === requestEpoch) showError(error, translating); }
     };
     const render = data => {
       stop(); current = data;
+      if (data.translation_request_id) localTranslationId = data.translation_request_id;
       const publishedTranslation = hasPublishedTranslation(data);
       if (publishedTranslation) {
+        if (localTranslationId && root.dataset.forget) void request(root.dataset.forget, { target: 'translation' }).catch(() => {});
+        localTranslationId = null;
         cancelExternal(); privateTranslation = null;
         if (externalStatus) externalStatus.textContent = '';
       }
       renderSettings(publishedTranslation);
       if (privateTranslation && privateTranslation.input !== data.transcription) privateTranslation = null;
       const active = ['queued', 'running'].includes(data.job?.status);
+      if (!active && data.translation_scope === 'private' && data.translation?.text && data.translation_request_id !== localResultId) {
+        localResultId = data.translation_request_id;
+        privateTranslation = { ...data.translation, input: data.transcription, local: true };
+        if (externalStatus) externalStatus.textContent = 'この画面を開いている間だけ表示する、自分用の機械訳です。他の訪問者には共有されません。';
+      }
+      if (retention) {
+        const privateResult = !!privateTranslation || data.translation_scope === 'private' && !!data.translation_request_id;
+        retention.hidden = data.quality === 'published' && !privateResult;
+        const expiry = data.ocr_expires_at ? new Date(data.ocr_expires_at * 1000).toLocaleString('ja-JP') : '';
+        retention.textContent = privateResult
+          ? '自分用の現代語訳は、この閲覧画面だけの一時的な支援情報です。図書館の確認済みデータとして登録されません。'
+          : `機械翻刻は閲覧支援のための一時的な結果です。${expiry ? `一時保存の期限: ${expiry}。` : ''}`;
+      }
       renderCacheControls(data);
       if (cacheJob?.id === data.id && !active) {
         const name = cacheJob.target === 'transcription' ? '機械翻刻' : '機械現代語訳';
@@ -331,7 +367,7 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
           translationEmptyMessage.textContent = '現代語訳は保存されていません。';
           model.hidden = true; model.textContent = '';
         }
-        if (translationFailed && !privateTranslation && !externalAbort) {
+        if (translationFailed && (!privateTranslation || data.translation_scope === 'private') && !externalAbort) {
           const p = document.createElement('p'); p.className = 'kobun-reading__warning';
           p.textContent = `前回の現代語訳の作成に失敗しました。${publicReadingError(data.job.error)}`;
           warnings.prepend(p);
@@ -339,12 +375,14 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
       }
       if (translateButton) {
         const state = llmState(policy), commercial = state.provider !== 'local';
-        translateButton.hidden = !(!publishedTranslation && data.lines.length && data.translation_available && (commercial || (data.quality === 'machine' && !data.translation)));
+        const localPrivate = data.translation_scope === 'private' || data.quality === 'published' && !publishedTranslation;
+        translateButton.hidden = !(!publishedTranslation && data.lines.length && data.translation_available && (commercial || localPrivate || (data.quality === 'machine' && !data.translation)));
         translateButton.disabled = cacheBusy || !!externalAbort || active;
-        translateButton.textContent = commercial ? `${providerNames[state.provider]}で${privateTranslation ? '訳を作り直す' : '自分用の現代語訳を作る'}` : '実験的な現代語訳を作る';
+        translateButton.textContent = commercial ? `${providerNames[state.provider]}で${privateTranslation ? '訳を作り直す' : '自分用の現代語訳を作る'}`
+          : localPrivate ? `${privateTranslation ? '自分用の訳を作り直す' : '自分用の現代語訳を作る'}` : '実験的な現代語訳を作る';
         cancelTranslation.hidden = !externalAbort;
         clearPrivate.hidden = !privateTranslation;
-        clearPrivate.disabled = !!externalAbort;
+        clearPrivate.disabled = cacheBusy || !!externalAbort || active;
       }
     };
 
@@ -419,12 +457,48 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
       }
     });
     if (cancelTranslation) cancelTranslation.addEventListener('click', () => { if (externalAbort) externalAbort.abort(); });
-    if (clearPrivate) clearPrivate.addEventListener('click', () => { privateTranslation = null; externalStatus.textContent = '自分用の訳を消去しました。'; render(current); });
+    if (clearPrivate) clearPrivate.addEventListener('click', async () => {
+      if (cacheBusy || advancing || externalAbort) return;
+      if (localTranslationId && root.dataset.forget) {
+        const epoch = requestEpoch;
+        cacheBusy = true; render(current);
+        try { await request(root.dataset.forget, { target: 'translation' }); }
+        catch (error) { if (epoch === requestEpoch) externalStatus.textContent = publicReadingError(error); return; }
+        finally { if (epoch === requestEpoch) { cacheBusy = false; render(current); } }
+        if (epoch !== requestEpoch) return;
+        localTranslationId = null; localResultId = null;
+        current = { ...current, translation: null, translation_request_id: null, job: null };
+      }
+      privateTranslation = null; externalStatus.textContent = '自分用の訳を消去しました。'; render(current);
+    });
     if (translationEnabled) {
       subscribeLlm(() => { const wasOpen = dialog.open; if (current) render(current); if (!wasOpen) closeDialog(); });
-      window.addEventListener('kobun-llm-forget', () => { cancelExternal(); privateTranslation = null; externalStatus.textContent = ''; if (current) render(current); });
+      window.addEventListener('kobun-llm-forget', async () => {
+        cancelExternal(); privateTranslation = null; externalStatus.textContent = '';
+        if (current && root.dataset.forget) {
+          const epoch = ++requestEpoch;
+          stop(); advancing = false; cacheBusy = true;
+          localTranslationId = null; localResultId = null;
+          if (current.translation_scope === 'private') current = { ...current, translation: null, translation_request_id: null, job: null };
+          render(current);
+          try { await request(root.dataset.forget, { target: 'translation' }); }
+          catch (error) { if (epoch === requestEpoch) externalStatus.textContent = publicReadingError(error); }
+          finally { if (epoch === requestEpoch) { cacheBusy = false; render(current); } }
+          return;
+        }
+        if (current) render(current);
+      });
       window.addEventListener('pagehide', () => { cancelExternal(); privateTranslation = null; translation.textContent = ''; });
     }
+    window.addEventListener('pagehide', () => {
+      requestEpoch++; advancing = false; cacheBusy = false;
+      if (root.dataset.forget) void fetch(root.dataset.forget, { method: 'POST', credentials: 'same-origin', keepalive: true,
+        headers: { 'Content-Type': 'application/json', 'X-Kobun-CSRF': root.dataset.csrf, 'X-Kobun-Reading': root.dataset.reading },
+        body: JSON.stringify({ target: 'all' }) }).catch(() => {});
+      localTranslationId = null; localResultId = null;
+      stop(); current = null; privateTranslation = null; transcription.textContent = '';
+    });
+    window.addEventListener('pageshow', event => { if (event.persisted) resetResult(); });
     window.addEventListener('beforeunload', () => { if (unsubscribe) unsubscribe(); });
   });
 })();

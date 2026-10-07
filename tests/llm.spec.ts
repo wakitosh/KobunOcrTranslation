@@ -70,6 +70,129 @@ const cachedData = () => ({ ...publicData(), quality: 'machine', label: '機械�
   transcription_credit: '', transcription_metadata: {}, can_manage_cache: true,
   translation: { text: '以前の共有訳', model: '旧モデル', method: 'machine', warnings: [] } });
 
+const privateData = () => ({ ...cachedData(), status: 'recognize', translation: null,
+  translation_scope: 'private', translation_request_id: null, can_manage_translation_cache: false,
+  ocr_expires_at: Date.now() / 1000 + 86400 });
+const personalId = 'abcdefabcdef123456789012';
+
+test('private local translation polls its own job, stays out of browser storage and can be erased', async ({ page }) => {
+  const data = privateData();
+  await publicFixture(page, true, undefined, data, true);
+  await page.locator('.kobun-reading__cache summary').click();
+  await expect(page.getByRole('button', { name: '現代語訳を再生成', exact: true })).toBeHidden();
+  let nonce = '', polled = false, forgotten = false;
+  await page.route(`${origin}/reading/run`, route => {
+    nonce = route.request().headers()['x-kobun-reading'];
+    expect(nonce).toMatch(/^[a-f0-9]{64}$/);
+    return route.fulfill({ json: { ...data, translation_request_id: personalId, job: { operation: 'translate', status: 'running' } } });
+  });
+  await page.route(`${origin}/reading/status?**`, route => {
+    expect(new URL(route.request().url()).searchParams.get('translation_id')).toBe(personalId);
+    expect(route.request().headers()['x-kobun-reading']).toBe(nonce);
+    polled = true;
+    return route.fulfill({ json: { ...data, translation_request_id: personalId,
+      translation: { text: translated, model: 'local-private' }, job: { operation: 'translate', status: 'completed' } } });
+  });
+  await page.route(`${origin}/reading/forget`, route => {
+    expect(route.request().headers()['x-kobun-reading']).toBe(nonce);
+    expect(route.request().postDataJSON()).toEqual({ target: 'translation' });
+    forgotten = true;
+    return route.fulfill({ json: { removed_documents: 1 } });
+  });
+  await page.getByRole('button', { name: '自分用の現代語訳を作る', exact: true }).click();
+  await expect(page.locator('.kobun-reading__translation')).toHaveText(translated);
+  expect(polled).toBe(true);
+  await expect(page.locator('.kobun-reading__retention')).toContainText('この閲覧画面だけ');
+  await expect(page.locator('.kobun-reading__model')).toContainText('local-private');
+  await expect(page.getByRole('button', { name: '自分用の訳を作り直す', exact: true })).toBeEnabled();
+  expect(await page.evaluate(() => JSON.stringify([localStorage, sessionStorage]))).not.toContain(translated);
+  await page.getByRole('button', { name: '自分用の訳を消去', exact: true }).click();
+  await expect(page.locator('.kobun-reading__translation')).toBeHidden();
+  expect(forgotten).toBe(true);
+  await expect(page.locator('.kobun-reading__transcription')).toContainText(source);
+});
+
+test('a private translation alongside official transcription is labelled unverified and retains generation settings', async ({ page }) => {
+  const data = { ...publicData(), translation_scope: 'private', translation_request_id: personalId,
+    translation: { text: translated, model: 'local-private' }, job: { operation: 'translate', status: 'completed' } };
+  await publicFixture(page, true, undefined, data);
+  await expect(page.locator('.kobun-reading__quality')).toContainText('自分用の現代語訳は機械生成・未確認');
+  await expect(page.locator('.kobun-llm summary')).toBeVisible();
+  await expect(page.getByRole('button', { name: '自分用の訳を作り直す', exact: true })).toBeEnabled();
+  await expect(page.locator('.kobun-reading__translation')).toHaveText(translated);
+});
+
+test('canvas change forgets only the previous scope and gives the new page a different nonce', async ({ page }) => {
+  await publicFixture(page, true, undefined, privateData());
+  const oldNonce = await page.locator('.kobun-reading').getAttribute('data-reading');
+  let forgottenNonce = '', nextNonce = '';
+  await page.route(`${origin}/reading/forget`, route => {
+    forgottenNonce = route.request().headers()['x-kobun-reading'];
+    expect(route.request().postDataJSON()).toEqual({ target: 'all' });
+    return route.fulfill({ json: { removed_documents: 0 } });
+  });
+  await page.route(`${origin}/reading/start`, route => {
+    nextNonce = route.request().headers()['x-kobun-reading'];
+    expect(route.request().postDataJSON()).toEqual({ media_id: 2 });
+    return route.fulfill({ json: privateData() });
+  });
+  await page.evaluate(() => {
+    (window as any).fixtureCanvas = 'c2'; (window as any).fixtureListeners.forEach((fn: () => void) => fn());
+  });
+  await expect(page.locator('.kobun-reading__dialog')).not.toHaveAttribute('open', '');
+  await page.getByRole('button', { name: 'このページを翻刻する' }).click();
+  expect(forgottenNonce).toBe(oldNonce);
+  expect(nextNonce).not.toBe(oldNonce);
+  await expect(page.locator('.kobun-reading__translation')).toBeHidden();
+});
+
+test('an expired private result allows requesting the page again', async ({ page }) => {
+  await publicFixture(page, true, undefined, { ...privateData(), translation_request_id: personalId,
+    job: { operation: 'translate', status: 'running' } });
+  await page.route(`${origin}/reading/status?**`, route => route.fulfill({ status: 410,
+    json: { error: '一時的な結果の有効期限が切れました。もう一度実行してください。' } }));
+  await expect(page.locator('.kobun-reading__message')).toContainText('期限切れ');
+  await expect(page.getByRole('button', { name: 'このページを翻刻する' })).toBeEnabled();
+});
+
+test('erasing a local private translation blocks regeneration until server cleanup finishes', async ({ page }) => {
+  await publicFixture(page, true, undefined, { ...privateData(), translation_request_id: personalId,
+    translation: { text: translated, model: 'local-private' } });
+  let finish!: () => void;
+  await page.route(`${origin}/reading/forget`, async route => {
+    await new Promise<void>(resolve => { finish = resolve; });
+    await route.fulfill({ json: { removed_documents: 1 } });
+  });
+  await page.getByRole('button', { name: '自分用の訳を消去', exact: true }).click();
+  await expect(page.getByRole('button', { name: '自分用の訳を作り直す', exact: true })).toBeDisabled();
+  await expect.poll(() => !!finish).toBe(true);
+  finish();
+  await expect(page.getByRole('button', { name: '自分用の現代語訳を作る', exact: true })).toBeEnabled();
+  await expect(page.locator('.kobun-reading__translation')).toBeHidden();
+});
+
+test('leaving a view forgets its private work and rejects late job responses', async ({ page }) => {
+  await publicFixture(page, true, undefined, privateData());
+  let finish!: () => void;
+  await page.route(`${origin}/reading/run`, async route => {
+    await new Promise<void>(resolve => { finish = resolve; });
+    await route.fulfill({ json: { ...privateData(), translation_request_id: personalId,
+      translation: { text: translated, model: 'local-private' } } });
+  });
+  let forgotten = false;
+  await page.route(`${origin}/reading/forget`, route => {
+    expect(route.request().postDataJSON()).toEqual({ target: 'all' }); forgotten = true;
+    return route.fulfill({ json: { removed_documents: 0 } });
+  });
+  await page.getByRole('button', { name: '自分用の現代語訳を作る', exact: true }).click();
+  await expect.poll(() => !!finish).toBe(true);
+  await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true })));
+  finish();
+  await expect.poll(() => forgotten).toBe(true);
+  await expect(page.locator('.kobun-reading__translation')).not.toContainText(translated);
+  await expect(page.locator('.kobun-reading__transcription')).toBeEmpty();
+});
+
 test('cache controls are absent for visitors and hidden for published editorial data', async ({ page }) => {
   await publicFixture(page, true, undefined, cachedData());
   await expect(page.locator('.kobun-reading__cache')).toHaveCount(0);
@@ -210,7 +333,7 @@ test('local-only visitor policy ignores a previously saved commercial key withou
   expect(await client(page, 'return api.llmState();')).toMatchObject({ provider: 'openai', hasKey: true });
   await expect(policyClient(page, 'await api.translateCommercial("本文", undefined, policy);')).rejects.toThrow('商用LLMを選択');
   await expect(policyClient(page, 'await api.saveLlm({provider:"openai",model:"x",storage:"plain"},"new-key","",policy);')).rejects.toThrow('許可されていません');
-  await expect(page.locator('.kobun-reading__translate')).toBeHidden();
+  await expect(page.locator('.kobun-reading__translate')).toHaveText('自分用の現代語訳を作る');
   expect(calls).toBe(0);
   await page.getByRole('button', { name: '保存設定・キーを消去' }).click();
   expect(await page.evaluate(key => localStorage.getItem(key), storageKey)).toBeNull();

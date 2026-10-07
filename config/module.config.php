@@ -15,7 +15,7 @@ return [
             'type' => Segment::class,
             'options' => [
                 'route' => '/s/:site-slug/kobun-reading/:action',
-                'constraints' => ['action' => 'start|status|run|cache'],
+                'constraints' => ['action' => 'start|status|run|cache|forget'],
                 'defaults' => [
                     'controller' => Controller\ReadingController::class,
                     '__SITE__' => true,
@@ -26,7 +26,7 @@ return [
         'type' => 'Segment',
         'options' => [
             'route' => '/kobun-ocr[/:action]',
-            'constraints' => ['action' => 'index|pages|proxy|import|service'],
+            'constraints' => ['action' => 'index|pages|proxy|import|service|cache'],
             'defaults' => ['__NAMESPACE__' => __NAMESPACE__ . '\\Controller',
                 'controller' => Controller\WorkspaceController::class, 'action' => 'index'],
         ],

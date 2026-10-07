@@ -13,6 +13,7 @@ import urllib.request
 from PIL import Image
 from server import make_handler
 from store import Store, Problem
+from cache_policy import DEFAULTS
 
 ACTOR = {'id': 17, 'name': 'キャッシュ管理者', 'role': 'global_admin'}
 LINE = {'id': 'old', 'x': 10, 'y': 10, 'width': 15, 'height': 80, 'readingOrder': 1, 'raw': '以前の翻刻'}
@@ -24,6 +25,7 @@ class CacheTest(unittest.TestCase):
         self.release, self.started = threading.Event(), threading.Event()
         self.calls, self.fail_recognition = [], False
         self.store = Store(self.temp.name, {}, self.runner)
+        self.store.set_cache_policy({**DEFAULTS, 'translation_mode': 'shared'})
         image = io.BytesIO()
         Image.new('RGB', (100, 120), 'white').save(image, 'JPEG')
         source = {'media_id': 1, 'item_id': 1, 'image_url': 'https://example.org/image.jpg'}
@@ -32,6 +34,7 @@ class CacheTest(unittest.TestCase):
         self.store.commit(self.editorial, 'publication_published', ACTOR)
         self.doc = self.store.create({**source, 'workflow': 'assist'}, image.getvalue())
         self.doc.update(lines=[copy.deepcopy(LINE)], translation={'text': '以前の訳'}, status='translate',
+            translation_generated_at=time.time(), translation_fingerprint=self.store._fingerprints.translation(),
             provenance={'layout': {}, 'recognize': {}, 'translate': {}},
             job={'id': 'old-job', 'operation': 'translate', 'status': 'error', 'error': '以前の失敗'})
         self.store.commit(self.doc, 'cached_result')
@@ -88,7 +91,7 @@ class CacheTest(unittest.TestCase):
         self.assertNotIn('job', updated)
         self.assertNotIn('translate', updated['provenance'])
         history = self.store.history(self.doc['id'])
-        self.assertEqual(history[-2]['document']['translation']['text'], '以前の訳')
+        self.assertNotIn('以前の訳', json.dumps(history, ensure_ascii=False))
         self.assertEqual(history[-1]['event'], 'cache_translation_deleted')
         self.assertEqual(history[-1]['actor'], ACTOR)
         self.assertEqual(self.store.get(self.editorial['id']), self.editorial)

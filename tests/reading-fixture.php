@@ -10,6 +10,7 @@ class ReadingFixture
     public function render($translationEnabled, $visitorLlmPolicy, $cacheAdministrator = false) {
         $pages = [['id' => 1, 'service' => 'https://images.test/1'], ['id' => 2, 'service' => 'https://images.test/2']];
         $csrf = 'fixture-csrf';
+        $readingToken = str_repeat('a', 64);
         include __DIR__ . '/../view/kobun-ocr-translation/reading/panel.phtml';
     }
 }

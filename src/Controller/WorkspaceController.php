@@ -7,10 +7,36 @@ use Laminas\Http\Client;
 use Laminas\Validator\Csrf;
 use Laminas\View\Model\ViewModel;
 use Laminas\Mvc\Controller\AbstractActionController;
+use KobunOcrTranslation\ReadingCachePolicy;
 
 /** Omeka-authenticated adapter: Omeka owns authorization and resolves image sources. */
 class WorkspaceController extends AbstractActionController
 {
+    public function cacheAction()
+    {
+        $identity = $this->identity();
+        if (!$identity || $identity->getRole() !== 'global_admin') {
+            $this->getResponse()->setStatusCode(403);
+            return $this->jsonResponse(['error' => '一時保存領域の管理は全体管理者に限られています。']);
+        }
+        if (!$this->getRequest()->isGet()) {
+            $this->getResponse()->setStatusCode(405);
+            return $this->jsonResponse(['error' => 'GETで送信してください。']);
+        }
+        try {
+            $services = $this->getEvent()->getApplication()->getServiceManager();
+            ReadingCachePolicy::synchronize($this->options(), ReadingCachePolicy::load($services->get('Omeka\Settings')));
+            $result = $this->upstream('GET', 'cache-policy');
+            if (!$result->isSuccess()) {
+                throw new \RuntimeException('Cache status unavailable');
+            }
+            return $this->jsonResponse(json_decode($result->getBody(), true, 16, JSON_THROW_ON_ERROR));
+        } catch (\Throwable $e) {
+            $this->getResponse()->setStatusCode(503);
+            return $this->jsonResponse(['error' => '一時保存の使用状況を取得できません。workerの起動状態を確認してください。']);
+        }
+    }
+
     private function jsonResponse(array $data)
     {
         $response = $this->getResponse();

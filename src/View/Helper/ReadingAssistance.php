@@ -5,6 +5,7 @@ namespace KobunOcrTranslation\View\Helper;
 
 use Laminas\Validator\Csrf;
 use KobunOcrTranslation\VisitorLlmPolicy;
+use KobunOcrTranslation\ReadingScope;
 use Laminas\View\Helper\AbstractHelper;
 use Omeka\Api\Representation\ItemRepresentation;
 
@@ -51,6 +52,7 @@ class ReadingAssistance extends AbstractHelper
             'translationEnabled' => (bool) $this->siteSettings->get('kobun_ocr_public_translation_enabled', false),
             'visitorLlmPolicy' => VisitorLlmPolicy::load($this->settings),
             'cacheAdministrator' => ($identity = $this->getView()->identity()) && $identity->getRole() === 'global_admin',
+            'readingToken' => ReadingScope::token(),
         ]);
     }
 }

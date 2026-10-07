@@ -36,6 +36,9 @@ class Module extends AbstractModule
             ['global_admin', 'site_admin'], array_intersect($configured, $valid)
         )));
         $acl->allow($roles, Controller\WorkspaceController::class);
+        // Let this action return a JSON 403 itself instead of an HTML dispatch
+        // error. It checks global_admin before any backend access.
+        $acl->allow(null, Controller\WorkspaceController::class, 'cache');
         $acl->allow(null, Controller\ReadingController::class);
     }
 
@@ -124,6 +127,9 @@ class Module extends AbstractModule
         $html .= '<p>追加した役割は、許可範囲内の保存済み作業の閲覧・翻刻修正・履歴確認だけを行えます。資料の新規取込、レイアウト変更、OCR再実行、現代語訳の実行はできません。</p></fieldset>';
         $identity = $services->get('Omeka\AuthenticationService')->getIdentity();
         if ($identity && $identity->getRole() === 'global_admin') {
+            $html .= $renderer->partial('kobun-ocr-translation/config/cache-policy', [
+                'policy' => ReadingCachePolicy::load($services->get('Omeka\Settings')),
+            ]);
             $endpoint = $renderer->url('admin/kobun-ocr', ['action' => 'service']);
             $csrf = (new Csrf(['name' => 'kobun_ocr', 'timeout' => 3600]))->getHash();
             $html .= '<fieldset id="kobun-service-control" data-endpoint="' . $renderer->escapeHtmlAttr($endpoint)
@@ -158,6 +164,9 @@ class Module extends AbstractModule
         $submitted = $controller->params()->fromPost('kobun_ocr_transcription_roles', []);
         try {
             $policy = VisitorLlmPolicy::validate($controller->params()->fromPost(VisitorLlmPolicy::SETTING, []));
+            $identity = $services->get('Omeka\AuthenticationService')->getIdentity();
+            $cachePolicy = $identity && $identity->getRole() === 'global_admin'
+                ? ReadingCachePolicy::validate($controller->params()->fromPost(ReadingCachePolicy::SETTING, [])) : null;
         } catch (\InvalidArgumentException $e) {
             $controller->messenger()->addError($e->getMessage());
             return false;
@@ -174,6 +183,14 @@ class Module extends AbstractModule
         $services->get('Omeka\Settings')->set('kobun_ocr_transcription_roles', $roles);
         $services->get('Omeka\Settings')->set('kobun_ocr_transcription_scopes', $scopes);
         $services->get('Omeka\Settings')->set(VisitorLlmPolicy::SETTING, $policy);
+        if ($cachePolicy !== null) {
+            $services->get('Omeka\Settings')->set(ReadingCachePolicy::SETTING, $cachePolicy);
+            try {
+                ReadingCachePolicy::synchronize($services->get('Config')['kobun_ocr'], $cachePolicy);
+            } catch (\Throwable $e) {
+                $controller->messenger()->addWarning('一時保存設定は保存しました。worker起動後、次の閲覧支援要求で反映します。');
+            }
+        }
         return true;
     }
 }

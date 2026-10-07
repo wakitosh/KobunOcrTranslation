@@ -16,6 +16,9 @@ import threading
 import time
 import uuid
 
+from cache_storage import CacheStorage
+from cache_policy import CACHE_WORKFLOWS, VERSION
+
 
 class Problem(Exception):
     def __init__(self, message, status=400):
@@ -67,7 +70,7 @@ def validate_reading_direction(value):
 
 
 def validate_workflow(value):
-    if value not in ('editorial', 'assist'):
+    if value not in ('editorial', 'assist', 'assist_translation'):
         raise Problem('作業区分が不正です。')
     return value
 
@@ -109,7 +112,7 @@ def validate_transcription_metadata(value):
     return result
 
 
-class Store:
+class Store(CacheStorage):
     def __init__(self, root, config, runner=None):
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
@@ -119,29 +122,34 @@ class Store:
         self.pending = 0
         self.maintenance = False
         self.runner = runner or self.run_engine
+        self._init_cache()
         # Interrupted work is visible and can be retried; never silently restarted.
-        for file in self.root.glob("*/document.json"):
+        for file in self._document_files():
             doc = json.loads(file.read_text())
             if doc.get("job", {}).get("status") in ("queued", "running"):
                 doc["job"].update(status="error", error="実行部が停止しました。保存済み状態から再実行してください。")
                 doc["status"] = "error"
+                if doc.get('workflow') in CACHE_WORKFLOWS:
+                    doc['cache_completed_at'] = time.time()
                 self.commit(doc, "interrupted", doc['job'].get('actor'))
+        self._start_cache_cleanup()
 
     def directory(self, ident):
         if not isinstance(ident, str) or not re.fullmatch(r"[a-f0-9]{24}", ident):
             raise Problem("作業IDが不正です。", 404)
-        return self.root / ident
+        temporary = self.temporary_root/ident
+        return temporary if temporary.exists() else self.root/ident
 
     def get(self, ident):
         with self.lock:
-            try:
-                return json.loads((self.directory(ident) / "document.json").read_text())
-            except FileNotFoundError:
-                raise Problem("作業が見つかりません。", 404)
+            doc = self._check_cache(self._read_raw(ident))
+            self._index_doc(doc)
+            return doc
 
     def list(self):
         with self.lock:
-            return [json.loads(f.read_text()) for f in sorted(self.root.glob("*/document.json"), reverse=True)]
+            docs = [json.loads(f.read_text()) for f in sorted(self.root.glob("*/document.json"), reverse=True)]
+            return [doc for doc in docs if doc.get('workflow', 'editorial') == 'editorial']
 
     def history(self, ident):
         self.get(ident)
@@ -150,6 +158,7 @@ class Store:
 
     def write(self, doc):
         atomic_json(self.directory(doc["id"])/"document.json", doc)
+        self._index_doc(doc)
 
     def commit(self, doc, event, actor=None):
         doc["revision"] += 1
@@ -157,6 +166,9 @@ class Store:
         folder = self.directory(doc["id"])/"history"
         folder.mkdir(exist_ok=True)
         record = {"event": event, "recorded_at": time.time(), "document": doc}
+        if doc.get('workflow') in CACHE_WORKFLOWS:
+            record.pop('document')
+            record['document_id'] = doc['id']
         if actor is not None:
             record['actor'] = actor
         atomic_json(folder/f'{doc["revision"]:06d}.json', record)
@@ -164,11 +176,16 @@ class Store:
 
     def existing(self, source):
         workflow = validate_workflow(source.get('workflow', 'editorial'))
-        for doc in self.list():
-            if (doc.get('workflow', 'editorial') == workflow
-                and doc["source"]["media_id"] == source["media_id"]
-                and doc["source"]["image_url"] == source["image_url"]):
-                return doc
+        scope = self.cache_scope(source)
+        with self.lock:
+            rows = self._cache_db.execute('SELECT id FROM documents WHERE workflow=? AND media=? AND url=? AND scope=?',
+                (workflow, source['media_id'], source['image_url'], scope)).fetchall()
+            for (ident,) in rows:
+                try:
+                    return self.get(ident)
+                except Problem as exc:
+                    if exc.status not in (404, 410):
+                        raise
         return None
 
     def create(self, source, data, fetch_ms=0):
@@ -183,9 +200,12 @@ class Store:
         workflow = validate_workflow(source.get('workflow', 'editorial'))
         # Preserve identifiers made before workflows were introduced.
         identity = f'{source["media_id"]}:{digest}' if workflow == 'editorial' else f'{workflow}:{source["media_id"]}:{digest}'
-        ident = hashlib.sha256(identity.encode()).hexdigest()[:24]
+        ident = hashlib.sha256(identity.encode()).hexdigest()[:24] if workflow == 'editorial' else uuid.uuid4().hex[:24]
         with self.lock:
-            folder = self.directory(ident)
+            if workflow in CACHE_WORKFLOWS:
+                self.cache_scope(source)
+                self._ensure_cache_capacity(len(data) + 2 * 1024**2)
+            folder = self.root/ident if workflow == 'editorial' else self.temporary_root/ident
             if (folder/"document.json").exists():
                 return self.get(ident)
             folder.mkdir(exist_ok=True)
@@ -195,6 +215,9 @@ class Store:
                 "revision": 0, "history_count": 0, "lines": [], "regions": [], "translation": None,
                 "reading_direction": "auto", "status": "image", "created_at": time.time(),
                 "last_metrics": {"image_fetch_ms": fetch_ms}}
+            if workflow in CACHE_WORKFLOWS:
+                doc.update(retention_version=VERSION, ocr_fingerprint=self._fingerprints.ocr(),
+                    translation_fingerprint=self._fingerprints.translation())
             self.commit(doc, "image_saved")
             return doc
 
@@ -443,6 +466,10 @@ class Store:
             doc = self.get(ident)
             if doc.get('workflow') != 'assist':
                 raise Problem('確認・公開用のデータはキャッシュ操作の対象外です。', 409)
+            if self.cache_scope(doc['source']) != 'shared':
+                raise Problem('閲覧ごとの一時結果は共有キャッシュ操作の対象外です。', 409)
+            if target == 'translation' and self.cache_policy['translation_mode'] != 'shared':
+                raise Problem('機械現代語訳は閲覧ごとの一時結果として扱います。', 403)
             self.check_revision(doc, body['base_revision'])
             if action == 'regenerate':
                 if before_regenerate:
@@ -451,6 +478,7 @@ class Store:
                     'operation': 'ocr' if target == 'transcription' else 'translate',
                     'base_revision': body['base_revision'],
                 }, cache_actor=actor)
+            self._scrub_translation(doc, event=None)
             doc.update(translation=None, translation_draft=None)
             provenance = doc.setdefault('provenance', {})
             provenance.pop('translate', None)
@@ -475,6 +503,9 @@ class Store:
             operation = body.get("operation")
             if operation not in ("layout", "recognize", "translate") and not (operation == 'ocr' and cache_actor):
                 raise Problem("未対応の処理です。")
+            if operation == 'translate' and doc.get('workflow') == 'assist' and (
+                self.cache_policy['translation_mode'] != 'shared' or self.cache_scope(doc['source']) != 'shared'):
+                raise Problem('機械現代語訳は閲覧ごとの一時処理として実行してください。', 409)
             selected = body.get('line_ids')
             draft = doc.get('translation_draft') if operation == 'translate' and not cache_actor else None
             if draft:
@@ -506,6 +537,8 @@ class Store:
                 "input_revision": doc["revision"], "accepted_at": time.time()}
             if operation == 'translate':
                 job['input_text'] = draft['text'] if draft else ''.join(line.get('raw', '') for line in targets)
+                if doc.get('workflow') == 'assist':
+                    doc['translation_attempted_at'] = job['accepted_at']
             if cache_actor:
                 job['cache_target'] = 'transcription' if operation == 'ocr' else 'translation'
                 job['actor'] = cache_actor
@@ -584,10 +617,23 @@ class Store:
                     raise Problem("入力の版が変わったため結果を採用しませんでした。", 409)
                 if job["operation"] in ("layout", "recognize", "ocr"):
                     validate_lines(result["lines"], doc["width"], doc["height"])
+                    if doc.get('workflow') == 'assist':
+                        self._scrub_translation(doc, event=None, keep_run=job['id'])
                     doc.update(lines=result["lines"], regions=result.get("regions", []), translation=None, translation_draft=None)
                     doc.setdefault('provenance', {}).pop('translate', None)
+                    if doc.get('workflow') == 'assist':
+                        self._invalidate_children(ident)
+                        doc['ocr_fingerprint'] = self._fingerprints.ocr()
+                        if job['operation'] in ('recognize', 'ocr'):
+                            doc['ocr_generated_at'] = time.time()
                 else:
+                    if doc.get('workflow') == 'assist' and self.cache_policy['translation_mode'] != 'shared':
+                        raise Problem('保存方針が変更されたため共有訳を保存しませんでした。', 409)
+                    if doc.get('workflow') == 'assist':
+                        self._scrub_translation(doc, event=None, keep_run=job['id'])
                     doc["translation"] = result["translation"]
+                    if doc.get('workflow') in CACHE_WORKFLOWS:
+                        doc.update(translation_generated_at=time.time(), translation_fingerprint=self._fingerprints.translation())
                 metrics = {**result["metrics"], "queue_ms": (job["started_at"]-job["accepted_at"])*1000,
                     "end_to_end_ms": (time.time()-job["accepted_at"])*1000}
                 job.update(status="completed", finished_at=time.time(), metrics=metrics)
@@ -598,6 +644,8 @@ class Store:
                         'prompt_revision', 'engine_ms', 'end_to_end_ms') if key in stage_metrics}
                     provenance[operation]['recorded_at'] = time.time()
                 doc.update(job=job, last_metrics=metrics, status=job["operation"], publication_state='draft')
+                if doc.get('workflow') in CACHE_WORKFLOWS:
+                    doc['cache_completed_at'] = time.time()
                 event = f"cache_{job['cache_target']}_regenerated" if job.get('cache_target') else job['operation']
                 self.commit(doc, event, job.get('actor'))
         except Exception as exc:
@@ -609,10 +657,17 @@ class Store:
                     'failure_type': type(exc).__name__, 'job_timeout_seconds': self.config.get('job_timeout', 300)}
                 job.update(status="error", error=error, finished_at=time.time(), metrics=metrics)
                 doc.update(job=job, status="error", last_metrics=metrics)
+                if doc.get('workflow') in CACHE_WORKFLOWS:
+                    doc['cache_completed_at'] = time.time()
                 self.commit(doc, "error", job.get('actor'))
         finally:
             with self.lock:
                 self.pending -= 1
+                self.cleanup_cache()
 
     def close(self):
+        self._cache_stop.set()
+        if self._cache_thread:
+            self._cache_thread.join(timeout=5)
         self.executor.shutdown(wait=True)
+        self._cache_db.close()

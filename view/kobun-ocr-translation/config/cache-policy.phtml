@@ -1,0 +1,30 @@
+<?php
+use KobunOcrTranslation\ReadingCachePolicy;
+$prefix = ReadingCachePolicy::SETTING;
+$labels = ['ocr_ttl_hours' => '翻刻の共有キャッシュ有効時間（時間）',
+    'translation_ttl_minutes' => '現代語訳の共有キャッシュ有効時間（分）',
+    'private_ttl_minutes' => '共有しない結果・処理用データの保存時間（分）',
+    'max_documents' => '一時保存する作業の件数上限', 'max_megabytes' => '一時保存領域の容量上限（MiB）'];
+?>
+<fieldset id="kobun-reading-cache-policy" data-endpoint="<?= $this->escapeHtmlAttr($this->url('admin/kobun-ocr', ['action' => 'cache'])) ?>">
+  <legend>閲覧支援の一時保存</legend>
+  <p>全サイトの訪問者向け結果に適用します。図書館の編集・確認・公開用データには適用しません。期限付き共有は、実行要求に応じて処理結果を再利用するための保存です。</p>
+  <?php foreach (['ocr_mode' => '機械翻刻の共有方法', 'translation_mode' => '機械現代語訳の共有方法'] as $name => $label): ?>
+  <div class="field"><div class="field-meta"><label for="kobun-cache-<?= $name ?>"><?= $label ?></label></div><div class="inputs">
+    <select id="kobun-cache-<?= $name ?>" name="<?= $prefix ?>[<?= $name ?>]">
+      <option value="private"<?= $policy[$name] === 'private' ? ' selected' : '' ?>>共有なし（この閲覧画面だけ）</option>
+      <option value="shared"<?= $policy[$name] === 'shared' ? ' selected' : '' ?>>期限付き共有</option>
+    </select>
+  </div></div>
+  <?php endforeach; ?>
+  <?php foreach ($labels as $name => $label): [$minimum, $maximum] = ReadingCachePolicy::BOUNDS[$name]; ?>
+  <div class="field"><div class="field-meta"><label for="kobun-cache-<?= $name ?>"><?= $label ?></label></div><div class="inputs">
+    <input type="number" id="kobun-cache-<?= $name ?>" name="<?= $prefix ?>[<?= $name ?>]" min="<?= $minimum ?>" max="<?= $maximum ?>" step="1" value="<?= $policy[$name] ?>" required>
+  </div></div>
+  <?php endforeach; ?>
+  <p>初期値は翻刻24時間・現代語訳は共有なし・処理用データ60分・1000件・1024 MiBです。閲覧で期限は延長しません。共有する訳の期限は、元の翻刻の期限を超えません。翻刻を共有しない場合は、訳も共有しません。商用APIの自分用の訳は常にブラウザ内だけに保持します。</p>
+  <p>workerが毎分、期限切れの本文・画像コピー・履歴・処理ログを削除します。上限に達した場合は処理済みの古い結果から削除し、処理中の作業は保護します。モデル・プロンプト変更時は旧結果を再利用しません。</p>
+  <p class="kobun-cache-status" role="status">使用状況を確認しています…</p>
+  <button type="button" class="kobun-cache-refresh">使用状況を更新</button>
+</fieldset>
+<script defer src="<?= $this->escapeHtmlAttr($this->assetUrl('cache-policy.js', 'KobunOcrTranslation')) ?>"></script>
