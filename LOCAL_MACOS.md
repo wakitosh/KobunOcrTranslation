@@ -1,6 +1,6 @@
 # macOSローカル環境の起動と復旧
 
-本番のRHEL 9.7向け手順は[DISTRIBUTION.md](DISTRIBUTION.md)を参照してください。この文書は開発用Macで運用サービスを起動するための補足です。worker用LaunchAgentは使用しません。workerとLLMサーバはOmekaのモジュール設定画面から起動します。
+Linux（RHEL 9.7）向けの設置手順は[DISTRIBUTION.md](DISTRIBUTION.md)を参照してください。この文書は開発用Macで運用サービスを起動するための補足です。worker用LaunchAgentは使用しません。workerとLLMサーバはOmekaのモジュール設定画面から起動します。
 
 ## 初回の登録
 
@@ -13,7 +13,7 @@ python3 modules/KobunOcrTranslation/worker/install_control_macos.py \
   --runtime "$PWD/var/kobun-ocr-translation"
 ```
 
-2行目のインストーラーが`~/Library/LaunchAgents/local.omeka-s.kobun-ocr-translation-control.plist`を作成し、運用サービスをすぐ起動します。以後はログイン時に起動し、異常終了時はlaunchdが再起動します。設定画面の「実行サービス」でworkerと、必要ならLLMサーバの「起動」を押してください。
+`install_control_macos.py`が`~/Library/LaunchAgents/local.omeka-s.kobun-ocr-translation-control.plist`を作成し、運用サービスをすぐ起動します。以後はログイン時に起動し、異常終了時はlaunchdが再起動します。設定画面の「実行サービス」でworkerと、必要ならLLMサーバの「起動」を押してください。
 
 ## 運用サービス自体の起動・状態確認
 

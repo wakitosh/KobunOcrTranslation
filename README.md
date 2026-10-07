@@ -36,7 +36,7 @@
 
 ## インストール
 
-RHEL 9.7本番サーバは[INSTALL_RHEL9.md](INSTALL_RHEL9.md)のGitHub取得＋一括インストーラを推奨します。標準配置はOmekaが`/opt/omeka-s`、バックエンドが`/opt/kobun-ocr-translation`です。設定・トークンの接続情報はWeb非公開領域から自動読込し、既存のOmeka設定は自動編集しません。運用業者への短い説明は[DEPLOYMENT_TEAMS.md](DEPLOYMENT_TEAMS.md)を利用できます。
+RHEL 9.7では[INSTALL_RHEL9.md](INSTALL_RHEL9.md)のGitHub取得＋一括インストーラを推奨します。設置例はOmekaが`/opt/omeka-s`、バックエンドが`/opt/kobun-ocr-translation`です。Omekaの実際の配置先・PHP実行ユーザ・IIIFホストは設置環境に合わせて指定してください。設定・トークンの接続情報はWeb非公開領域から自動読込し、既存のOmeka設定は自動編集しません。
 
 以下はZIP・手動設置の概要です。
 

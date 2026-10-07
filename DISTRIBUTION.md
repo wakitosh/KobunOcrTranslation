@@ -6,31 +6,31 @@
 |---|---|---|
 | OmekaモジュールZIP | PHP、構築済みJS/CSS、編集可能なUIソース、worker、NDL実行用ソース、ライセンス | 小容量。モデル・入力画像・秘密情報を含まない |
 | OCRモデル | RTMDet 40,188,733 bytes、PARSeq 42,442,247 bytes、合計82.63 MB | 設置者が別途取得。CC BY 4.0 |
-| 翻訳モデル（選択式） | Qwen3.5-9B Q4_K_M: 6,169,341,984 bytes（6.17 GB / 5.75 GiB） | 既存のローカル試験用モデル。古文の訳の品質は未解決。Apache 2.0 |
-| 翻訳モデル（比較用） | Qwen3-4B-Instruct-2507 Q4_K_M: 2,497,280,736 bytes（2.50 GB / 2.33 GiB） | 小容量だが今回の古文短文では意味の誤りあり。Apache 2.0 |
+| 翻訳モデル（選択式） | Qwen3.5-9B Q4_K_M: 6,169,341,984 bytes（6.17 GB / 5.75 GiB） | 設置者が別途取得。訳文は人による確認が必要。Apache 2.0 |
+| 翻訳モデル（比較用） | Qwen3-4B-Instruct-2507 Q4_K_M: 2,497,280,736 bytes（2.50 GB / 2.33 GiB） | 小容量の選択肢。訳文は人による確認が必要。Apache 2.0 |
 | 実行環境 | Python仮想環境、llama.cpp、ログ、認証情報、作業データ | 設置者のサーバに別途配置 |
 
 GBは10進、GiBは2進。ファイル容量と実行時メモリは異なります。9Bモデルは画像入力用の追加モデル（mmproj）を使用せず、OCR後のテキストだけを受け取ります。
 
 モデルの固定リビジョン、ファイル名、容量、SHA-256、取得先、ライセンスへのリンクは [`worker/models.json`](worker/models.json) に集約しています。モデルの有効化・モジュールのインストール時にはダウンロードしません。設置者が `assets.py fetch` またはセットアップスクリプトを明示実行します。既存ファイルはサイズとSHA-256を照合し、不一致を上書きしません。中断ファイルは `.partial` のままで、検証完了後に正式名へ移します。
 
-## 元のソース全体は必要か
+## 同梱ソースとライセンス
 
 **両プロジェクトの元リポジトリ全体をモジュールに添付する必要はありません。** 確認した固定版はいずれもCC BY 4.0です。同ライセンスの第2条(a)(1)は一部の複製・配布と翻案物の配布を認め、第3条(a)は提供された著作者・著作権等の表示、ライセンス・免責等の通知、合理的に実行可能な原資料へのリンク、変更の表示等を要求しています。元ソース一式を併送する条項はありません。[CC BY 4.0 日本語リーガルコード](https://creativecommons.org/licenses/by/4.0/legalcode.ja)
 
-今回の実装で必要な範囲は次のとおりです。
+同梱するソースと依存関係は次のとおりです。
 
 - **みんなで翻刻OCR**：改変した `ui/ImageViewer.tsx`、`ui/viewer.css` と、それを構築した画面を配布します。元アプリのブラウザ推論・モデルキャッシュ・他サービス連携の実装は不要です。作者・出典・固定版・変更内容は画面と `THIRD_PARTY_NOTICES.md` に記載しています。
-- **NDL古典籍OCR-Lite**：workerがRTMDet/PARSeq/読み順処理をimportするので、そのコードは実行時に必要です。今回は約211 KBの実行用ソースを `worker/vendor/ndlkotenocr` に未改変で同梱しました。GUI、学習用コード、サンプル、重み、Git履歴は除外しています。対象ファイルと原版のハッシュは `ORIGIN.json` で確認できます。元リポジトリの別cloneには依存しません。
+- **NDL古典籍OCR-Lite**：workerがRTMDet/PARSeq/読み順処理をimportするので、そのコードは実行時に必要です。約211 KBの実行用ソースを `worker/vendor/ndlkotenocr` に未改変で同梱しました。GUI、学習用コード、サンプル、重み、Git履歴は除外しています。対象ファイルと原版のハッシュは `ORIGIN.json` で確認できます。元リポジトリの別cloneには依存しません。
 - **第三者依存物**：上記とは別のライセンスを持つ部分もあります。NDLの `LICENCE_DEPENDENCEIES` と各JSライブラリのライセンスを同梱しています。Python依存パッケージ・llama.cppは別途導入します。
 
-独自コードは従来のモジュール設定どおりGPL-3.0-or-later、取り込んだ部分はそれぞれの表示・ライセンスを保持します。配布ZIPには編集可能なソース、ビルド設定、依存バージョン、GPL本文も含めます。
+独自コードはGPL-3.0-or-later、取り込んだ部分はそれぞれの表示・ライセンスを保持します。配布ZIPには編集可能なソース、ビルド設定、依存バージョン、GPL本文も含めます。
 
-Qwenモデルも本体とは別のライセンスです。今回はモデルファイルを再配布せず、配布元から取得します。将来モデル入りのオフライン媒体を配布する場合は、その固定版のApache 2.0本文、著作権・NOTICE（存在する場合）と変換元・量子化版の表示を媒体に含めてください。[Qwen3.5-9B公式モデルカード](https://huggingface.co/Qwen/Qwen3.5-9B)、[Apache 2.0 第4条](https://www.apache.org/licenses/LICENSE-2.0)
+Qwenモデルも本体とは別のライセンスです。モデルファイルは同梱せず、配布元から取得します。将来モデル入りのオフライン媒体を配布する場合は、その固定版のApache 2.0本文、著作権・NOTICE（存在する場合）と変換元・量子化版の表示を媒体に含めてください。[Qwen3.5-9B公式モデルカード](https://huggingface.co/Qwen/Qwen3.5-9B)、[Apache 2.0 第4条](https://www.apache.org/licenses/LICENSE-2.0)
 
 ## RHEL 9.7への設置（単一サーバ・CPU実行）
 
-**本番の標準手順は[INSTALL_RHEL9.md](INSTALL_RHEL9.md)の一括導入を使用してください。** `/opt/omeka-s`のモジュールディレクトリへGitHubのコードを取得し、`worker/install_rhel9.py`で`/opt/kobun-ocr-translation`へバックエンドを構築します。計画表示が初期動作で、`--apply`時だけ専用ユーザ作成・環境構築・サービス登録を行います。運用業者向けの短い依頼文は[DEPLOYMENT_TEAMS.md](DEPLOYMENT_TEAMS.md)です。
+**RHEL 9.7の一括導入は[INSTALL_RHEL9.md](INSTALL_RHEL9.md)を参照してください。** `/opt/omeka-s`のモジュールディレクトリへGitHubのコードを取得し、`worker/install_rhel9.py`で`/opt/kobun-ocr-translation`へバックエンドを構築します。計画表示が初期動作で、`--apply`時だけ専用ユーザ作成・環境構築・サービス登録を行います。Omekaの配置先、PHP実行ユーザ、IIIFホストは設置環境に合わせて指定してください。
 
 以下は構成を個別に確認したい場合の手動設置例です。一括導入と併用せず、配置・ユーザ・接続設定を揃えてください。
 
@@ -143,4 +143,4 @@ npm --prefix modules/KobunOcrTranslation run build
 python3 modules/KobunOcrTranslation/worker/package.py --output /tmp/kobun-ocr-releases
 ```
 
-ZIP、ZIPのSHA-256、含まれる全ファイルのハッシュ一覧を出力します。許可したファイルだけを梱包し、モデル・node_modules・参照リポジトリ・入力画像・実行ログ・トークンは入りません。構築済みアセットを含むため、利用者側のNode.js/npmは不要です。ZIPを `modules/` に展開して通常のモジュール操作で有効化できますが、OCR/翻訳の実行には別途workerとモデルが必要です。
+ZIP、ZIPのSHA-256、含まれる全ファイルのハッシュ一覧を出力します。許可したファイルだけを梱包し、モデル・node_modules・参照リポジトリ・入力画像・実行ログ・トークン・設置環境固有の内部資料は入りません。構築済みアセットを含むため、利用者側のNode.js/npmは不要です。ZIPを `modules/` に展開して通常のモジュール操作で有効化できますが、OCR/翻訳の実行には別途workerとモデルが必要です。

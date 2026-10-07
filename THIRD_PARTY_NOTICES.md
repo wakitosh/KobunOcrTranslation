@@ -21,14 +21,14 @@
 
 React / React DOM (MIT) and OpenSeadragon (BSD-3-Clause) are bundled by Vite. Their license texts are retained under `licenses/`. Build dependency versions are recorded in `package-lock.json`.
 
-## Translation models used for local testing
+## Optional translation models
 
 - Original model: [Qwen3-4B-Instruct-2507](https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507), Apache 2.0.
 - GGUF conversion: [bartowski/Qwen_Qwen3-4B-Instruct-2507-GGUF](https://huggingface.co/bartowski/Qwen_Qwen3-4B-Instruct-2507-GGUF), revision `ae44f08e1392f39c0e474af10c3ff8355c8b6688`, `Q4_K_M`.
-- Runtime: [llama.cpp](https://github.com/ggml-org/llama.cpp), MIT, build `b10980` for the initial test.
-- Model files are downloaded separately into the experiment runtime, not bundled in this module. Their hashes are recorded with the experiment configuration.
+- Runtime: [llama.cpp](https://github.com/ggml-org/llama.cpp), MIT, pinned build `b10980`.
+- Model files are downloaded separately into the private runtime, not bundled in this module. Their sources, fixed revisions, sizes, hashes and license links are recorded in `worker/models.json`.
 
-### Additional evaluation model (0.2.0)
+### Qwen3.5-9B
 
 - Original model: [Qwen3.5-9B](https://huggingface.co/Qwen/Qwen3.5-9B), Apache 2.0.
 - GGUF conversion: [bartowski/Qwen_Qwen3.5-9B-GGUF](https://huggingface.co/bartowski/Qwen_Qwen3.5-9B-GGUF), revision `182be2fd6c7bc44887d88a91cb03ff009cc9f549`, Q4_K_M.

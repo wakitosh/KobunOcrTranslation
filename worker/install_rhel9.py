@@ -48,7 +48,7 @@ def arguments(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--omeka-root', type=absolute_path, default=Path('/opt/omeka-s'))
     parser.add_argument('--prefix', type=absolute_path, default=Path('/opt/kobun-ocr-translation'))
-    parser.add_argument('--php-user', type=account, required=True, help='PHP-FPM worker Unix user (alex4: limewww)')
+    parser.add_argument('--php-user', type=account, required=True, help='Unix user running PHP-FPM/httpd (e.g. apache)')
     parser.add_argument('--service-user', type=account, default='kobunocr')
     parser.add_argument('--model', choices=MODELS, default=MODELS[0])
     parser.add_argument('--image-host', type=host, action='append', required=True, help='IIIF image host; repeat if necessary')
@@ -310,7 +310,7 @@ def install(args):
             if attempt == 9:
                 raise RuntimeError('Control service did not respond. Check journalctl -u ' + UNIT)
             time.sleep(1)
-    print('Enable the module in Omeka, then start worker/LLM from its settings. See DEPLOYMENT_TEAMS.md.')
+    print('Enable the module in Omeka, then start worker/LLM from its settings. See INSTALL_RHEL9.md.')
     if args.prefix != Path('/opt/kobun-ocr-translation'):
         print('Custom prefix requires Omeka local.config.php settings from ' + str(php_dir/'backend.json'))
 

@@ -26,3 +26,7 @@ blob-report/
 backend-token
 *.pem
 *.key
+
+# Internal deployment requests and site-specific operator notes.
+/DEPLOYMENT_TEAMS.md
+/local-docs/

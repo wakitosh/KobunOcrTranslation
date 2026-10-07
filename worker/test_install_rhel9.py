@@ -14,12 +14,12 @@ from manage import initialize
 
 class InstallTest(unittest.TestCase):
     def args(self, *extra):
-        return installer.arguments(['--php-user', 'limewww', '--image-host', 'dc.tulips.tsukuba.ac.jp', *extra])
+        return installer.arguments(['--php-user', 'phpfixture', '--image-host', 'iiif.example.org', *extra])
 
     def test_default_is_read_only_with_limited_nine_b_model(self):
         with patch.object(installer, 'install') as install, patch.object(installer.subprocess, 'run') as run:
             with contextlib.redirect_stdout(io.StringIO()) as output:
-                installer.main(['--php-user', 'limewww', '--image-host', 'dc.tulips.tsukuba.ac.jp'])
+                installer.main(['--php-user', 'phpfixture', '--image-host', 'iiif.example.org'])
         install.assert_not_called()
         run.assert_not_called()
         self.assertIn('CPU cap: 200%', output.getvalue())
@@ -35,7 +35,7 @@ class InstallTest(unittest.TestCase):
         self.assertIn('ProtectSystem=strict', unit)
         self.assertIn('ReadWritePaths=/opt/kobun-ocr-translation/runtime', unit)
         self.assertNotIn('ReadWritePaths=/opt/omeka-s', unit)
-        self.assertNotIn('library', unit)
+        self.assertNotIn('Group=phpfixture', unit)
         command = installer.setup_command(args)
         self.assertIn('--property=User=kobunocr', command)
         self.assertIn('--property=CPUQuota=200%', command)
@@ -46,7 +46,7 @@ class InstallTest(unittest.TestCase):
 
     def test_invalid_paths_accounts_and_resource_limits_rejected(self):
         for extra in [('--prefix', '/opt/omeka-s/data'), ('--prefix', '/opt'),
-                      ('--service-user', 'root'), ('--service-user', 'limewww'),
+                      ('--service-user', 'root'), ('--service-user', 'phpfixture'),
                       ('--threads', '0'), ('--memory-max', 'infinity'),
                       ('--prefix', '/opt/path with spaces'), ('--image-host', 'https://example.org')]:
             with self.subTest(extra=extra), contextlib.redirect_stderr(io.StringIO()):
@@ -65,7 +65,7 @@ class InstallTest(unittest.TestCase):
             stack.enter_context(patch.object(Path, 'is_symlink', return_value=False))
             stack.enter_context(patch.object(Path, 'is_file', return_value=True))
             stack.enter_context(patch.object(Path, 'exists', lambda path: str(path) in ('/opt', '/')))
-            stack.enter_context(patch.object(installer.pwd, 'getpwnam', side_effect=lambda name: php_user if name == 'limewww' else fake_user))
+            stack.enter_context(patch.object(installer.pwd, 'getpwnam', side_effect=lambda name: php_user if name == 'phpfixture' else fake_user))
             stack.enter_context(patch.object(installer.os, 'getgrouplist', return_value=[1001]))
             stack.enter_context(patch.object(installer.subprocess, 'run', return_value=SimpleNamespace(stdout=active)))
             stack.enter_context(patch.object(installer.subprocess, 'check_output', return_value=listeners))
