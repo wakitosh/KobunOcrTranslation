@@ -1,7 +1,7 @@
-import { mountReadingWindow } from './reading-window.js';
 // Relative module imports do not inherit Omeka's version query from reading.js.
-const { llmState, subscribeLlm, mountLlmSettings, providerNames, confirmCommercial, translateCommercial, visitorLlmPolicy, publicReadingError } =
-  await import(`./dist/llm.js${new URL(import.meta.url).search}`);
+const assetVersion = new URL(import.meta.url).search;
+const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, providerNames, confirmCommercial, translateCommercial, visitorLlmPolicy, publicReadingError }] =
+  await Promise.all([import(`./reading-window.js${assetVersion}`), import(`./dist/llm.js${assetVersion}`)]);
 
 (() => {
   'use strict';

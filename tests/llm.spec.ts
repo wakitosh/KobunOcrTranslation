@@ -306,11 +306,16 @@ test('disabled public translation has no settings or translation tab', async ({ 
   await expect(page.getByRole('tab', { name: '現代語訳' })).toHaveCount(0);
 });
 
-test('the public entry passes its module version to the shared LLM dependency', async ({ page }) => {
+test('the public entry passes its module version to the window and LLM dependencies', async ({ page }) => {
   const html = execFileSync('php', ['tests/reading-fixture.php', 'enabled'], { encoding: 'utf8' })
     .replace('asset/reading.js"', 'asset/reading.js?v=fixture-update"');
   await serveAssets(page, html);
-  const queries: string[] = [];
+  const queries: string[] = [], windowQueries: string[] = [];
+  await page.route(`${origin}${assetPath}reading-window.js*`, route => {
+    const url = new URL(route.request().url()); windowQueries.push(url.search);
+    return route.fulfill({ contentType: 'text/javascript', body: url.search
+      ? fs.readFileSync('asset/reading-window.js') : 'export const oldWindow = true;' });
+  });
   await page.route(`${origin}${assetPath}dist/llm.js*`, route => {
     const url = new URL(route.request().url()); queries.push(url.search);
     // Simulate an already cached dependency with none of the new exports.
@@ -322,6 +327,7 @@ test('the public entry passes its module version to the shared LLM dependency', 
   await page.getByRole('button', { name: 'このページを翻刻する' }).click();
   await expect(page.locator('.kobun-reading__transcription')).toHaveText(source);
   expect(queries).toEqual(['?v=fixture-update']);
+  expect(windowQueries).toEqual(['?v=fixture-update']);
 });
 
 for (const enabled of [true, false]) {

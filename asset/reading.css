@@ -70,15 +70,22 @@
   font-size: .8rem;
 }
 .kobun-reading__dialog {
+  --kobun-reading-safe-top: env(safe-area-inset-top, 0px);
+  --kobun-reading-safe-right: env(safe-area-inset-right, 0px);
+  --kobun-reading-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --kobun-reading-safe-left: env(safe-area-inset-left, 0px);
   position: fixed;
   z-index: 10000;
-  inset: 1rem 1rem auto auto;
+  inset: max(1rem, var(--kobun-reading-safe-top)) max(1rem, var(--kobun-reading-safe-right)) auto auto;
   width: min(34rem, calc(50vw - 1.5rem));
   min-width: min(20rem, calc(100vw - 16px));
   height: min(42rem, calc(100vh - 2rem));
+  height: min(42rem, calc(100dvh - 2rem));
   min-height: min(16rem, calc(100vh - 16px));
   max-width: calc(100vw - 16px);
   max-height: calc(100vh - 16px);
+  max-width: calc(100vw - max(8px, var(--kobun-reading-safe-left)) - max(8px, var(--kobun-reading-safe-right)));
+  max-height: calc(100dvh - max(8px, var(--kobun-reading-safe-top)) - max(8px, var(--kobun-reading-safe-bottom)));
   margin: 0;
   padding: 0;
   border: 0;
@@ -89,9 +96,18 @@
   overflow: hidden;
   resize: none;
   font-size: .875rem;
+  overflow-wrap: anywhere;
+  container: kobun-reading / inline-size;
 }
 .kobun-reading__dialog[open] { display: flex; flex-direction: column; }
-.kobun-reading__window-body { flex: 1 1 auto; min-height: 0; overflow: auto; background: #fff; }
+.kobun-reading__window-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding-bottom: 1.5rem;
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: #fff;
+}
 .kobun-reading__resize-controls {
   position: absolute;
   inset: auto 0 0;
@@ -193,6 +209,7 @@
   border-radius: 50%;
   animation: kobun-reading-spin .8s linear infinite;
 }
+.kobun-reading__progress b { min-width: 0; }
 @keyframes kobun-reading-spin { to { transform: rotate(360deg); } }
 .kobun-reading__tabs {
   display: flex;
@@ -228,15 +245,18 @@
   flex-direction: row;
   align-items: flex-start;
   gap: .75rem;
-  min-height: 24rem;
+  min-height: min(12rem, var(--kobun-reading-column-height, 24rem));
   overflow: auto;
+  overscroll-behavior-x: contain;
 }
 .kobun-reading__transcription.is-vertical.reading-rtl { flex-direction: row-reverse; }
 .kobun-reading__transcription p.is-vertical {
   writing-mode: vertical-rl;
   text-orientation: mixed;
-  white-space: nowrap;
+  max-height: var(--kobun-reading-column-height, 24rem);
+  white-space: pre-wrap;
 }
+.kobun-reading__transcription.reading-ltr p.is-vertical { writing-mode: vertical-lr; }
 .kobun-reading__transcription.is-vertical p.is-vertical {
   flex: 0 0 auto;
   margin: 0;
@@ -251,6 +271,7 @@
 .kobun-reading__external-status:empty { display: none; }
 .kobun-reading__translation-actions { display: flex; flex-wrap: wrap; gap: .4rem; }
 .kobun-reading__dialog .kobun-llm details { margin: 0; padding: 0; border: 1px solid #c8d4cd; background: #f8fbf9; }
+.kobun-reading__dialog .kobun-llm fieldset { min-inline-size: 0; }
 .kobun-reading__model { color: #617067; font-size: .8rem; overflow-wrap: anywhere; }
 .kobun-reading__warning { padding: .5rem; background: #fff3cd; }
 .kobun-reading__dialog details {
@@ -264,18 +285,27 @@
   font-size: .875rem;
 }
 
-@media (max-width: 540px) {
+@media (min-width: 601px) and (max-width: 1024px) and (orientation: portrait) {
+  .kobun-reading__dialog { width: min(34rem, calc(70vw - 1.5rem)); }
+}
+
+@media (max-width: 600px), (max-width: 950px) and (max-height: 500px) {
   .kobun-reading__controls { gap: .5rem; }
   .kobun-reading__state { max-width: 7.5rem; font-size: .65rem; }
   .kobun-reading__dialog {
-    inset: .5rem .5rem auto auto;
+    inset: max(.5rem, var(--kobun-reading-safe-top)) max(.5rem, var(--kobun-reading-safe-right)) auto auto;
     width: calc(100vw - 1rem);
-    max-width: calc(100vw - 16px);
     height: min(36rem, calc(100vh - 1rem));
-    max-height: calc(100vh - 16px);
+    height: min(36rem, 78dvh);
   }
+}
+
+/* Respond to a manually narrowed window as well as to the device width. */
+@container kobun-reading (max-width: 480px) {
   .kobun-reading__modal-heading,
   .kobun-reading__tabpanel { padding-left: 1rem; padding-right: 1rem; }
+  .kobun-reading__modal-heading { padding-top: .75rem; padding-bottom: .65rem; gap: .5rem; }
+  .kobun-reading__modal-heading h2 { font-size: 1.25rem; }
   .kobun-reading__tabs,
   .kobun-reading__quality,
   .kobun-reading__responsibility,
@@ -283,4 +313,23 @@
   .kobun-reading__progress { margin-left: 1rem; margin-right: 1rem; }
   .kobun-reading__attribution dl { grid-template-columns:1fr; gap:.15rem; }
   .kobun-reading__attribution dd { margin-bottom:.45rem; }
+  .kobun-reading__dialog details { padding-left: 1rem; padding-right: 1rem; }
+}
+
+@media (max-width: 950px) and (max-height: 500px) {
+  .kobun-reading__modal-heading { padding-top: .5rem; padding-bottom: .5rem; }
+  .kobun-reading__modal-heading h2 { font-size: 1.125rem; }
+  .kobun-reading__eyebrow { font-size: .65rem; }
+  .kobun-reading__quality { margin-top: .5rem; padding: .5rem; }
+  .kobun-reading__tabs { margin-top: .75rem; }
+}
+
+@media (any-pointer: coarse) {
+  .kobun-reading .kobun-reading__dialog button { min-height: 2.75rem; }
+  .kobun-reading__resize-controls { height: 2.75rem; }
+  .kobun-reading .kobun-reading__resize-handle { width: 2.75rem; height: 2.75rem; }
+  .kobun-reading__window-body { padding-bottom: 2.75rem; }
+  .kobun-reading__dialog summary { min-height: 2.75rem; box-sizing: border-box; }
+  .kobun-reading__dialog .kobun-llm input:not([type="radio"]),
+  .kobun-reading__dialog .kobun-llm select { font-size: max(1rem, 16px); min-height: 2.75rem; }
 }
