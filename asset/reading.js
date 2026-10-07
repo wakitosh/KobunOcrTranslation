@@ -94,6 +94,7 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
     };
     const activateTab = name => {
       if (name === 'translation' && !translationEnabled) name = 'transcription';
+      root.dataset.activeTab = name;
       tabs.forEach(tab => {
         const active = tab.dataset.tab === name;
         tab.classList.toggle('is-active', active);

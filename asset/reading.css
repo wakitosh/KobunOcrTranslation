@@ -190,6 +190,8 @@
 .kobun-reading__attribution dl { display:grid; grid-template-columns:max-content minmax(0,1fr); gap:.35rem 1rem; margin:0; }
 .kobun-reading__attribution dt { color:#52645a; font-size:.8rem; font-weight:700; }
 .kobun-reading__attribution dd { margin:0; white-space:pre-line; overflow-wrap:anywhere; }
+.kobun-reading[data-active-tab="translation"] .kobun-reading__attribution,
+.kobun-reading[data-active-tab="translation"] .kobun-reading__responsibility { display: none; }
 .kobun-reading__progress {
   display: flex;
   align-items: center;
