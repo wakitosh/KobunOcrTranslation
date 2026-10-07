@@ -54,7 +54,19 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
     let policy;
     try { policy = visitorLlmPolicy(JSON.parse(root.dataset.llmPolicy)); }
     catch { policy = visitorLlmPolicy(null); }
-    if (translationEnabled) mountLlmSettings(get('llm-settings'), policy);
+    let settingsReadOnly = null, unmountSettings = null;
+    const renderSettings = readOnly => {
+      if (!translationEnabled || settingsReadOnly === readOnly) return;
+      if (unmountSettings) unmountSettings();
+      settingsReadOnly = readOnly;
+      const host = get('llm-settings');
+      host.hidden = false;
+      // Published translations need no generation settings. Keep only the
+      // existing credential cleanup UI for visitors on shared devices.
+      unmountSettings = mountLlmSettings(host, readOnly ? { ...policy, form_enabled: false } : policy);
+    };
+    const hasPublishedTranslation = data => data?.quality === 'published' && !!data.translation?.text?.trim();
+    renderSettings(false);
     const externalStatus = get('external-status'), cancelTranslation = get('cancel-translation'), clearPrivate = get('clear-private');
     const cancelExternal = () => { if (externalAbort) externalAbort.abort(); externalAbort = null; };
 
@@ -105,6 +117,7 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
     };
     const resetResult = () => {
       cancelExternal(); privateTranslation = null;
+      renderSettings(false);
       if (externalStatus) externalStatus.textContent = '';
       stop(); current = null; advancing = false; closeDialog();
       setState('実行前');
@@ -191,6 +204,12 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
     };
     const render = data => {
       stop(); current = data;
+      const publishedTranslation = hasPublishedTranslation(data);
+      if (publishedTranslation) {
+        cancelExternal(); privateTranslation = null;
+        if (externalStatus) externalStatus.textContent = '';
+      }
+      renderSettings(publishedTranslation);
       if (privateTranslation && privateTranslation.input !== data.transcription) privateTranslation = null;
       const active = ['queued', 'running'].includes(data.job?.status);
       startButton.textContent = startLabel;
@@ -284,7 +303,7 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
       }
       if (translateButton) {
         const state = llmState(policy), commercial = state.provider !== 'local';
-        translateButton.hidden = !(data.lines.length && data.translation_available && (commercial || (data.quality === 'machine' && !data.translation)));
+        translateButton.hidden = !(!publishedTranslation && data.lines.length && data.translation_available && (commercial || (data.quality === 'machine' && !data.translation)));
         translateButton.disabled = !!externalAbort || active;
         translateButton.textContent = commercial ? `${providerNames[state.provider]}で${privateTranslation ? '訳を作り直す' : '自分用の現代語訳を作る'}` : '実験的な現代語訳を作る';
         cancelTranslation.hidden = !externalAbort;
@@ -303,7 +322,7 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
     get('close').addEventListener('click', closeDialog);
     window.addEventListener('keydown', event => { if (event.key === 'Escape' && dialog.open) closeDialog(); });
     if (translateButton) translateButton.addEventListener('click', async () => {
-      if (!current || advancing || externalAbort || ['queued', 'running'].includes(current.job?.status)) return;
+      if (!current || hasPublishedTranslation(current) || advancing || externalAbort || ['queued', 'running'].includes(current.job?.status)) return;
       const settings = llmState(policy);
       if (settings.provider === 'local') {
         translateButton.hidden = true; message.textContent = '現代語訳を準備しています…';

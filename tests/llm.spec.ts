@@ -306,6 +306,80 @@ test('disabled public translation has no settings or translation tab', async ({ 
   await expect(page.getByRole('tab', { name: '現代語訳' })).toHaveCount(0);
 });
 
+test('published translations show only the approved text and restore settings on an untranslated canvas', async ({ page }) => {
+  const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
+  const published = { ...publicData(), translation: { text: translated, method: 'manual', warnings: [] } };
+  await publicFixture(page, true, undefined, published);
+  let runs = 0;
+  await page.route(`${origin}/reading/run`, route => { runs++; return route.abort(); });
+  await expect(page.locator('.kobun-llm form')).toHaveCount(0);
+  await expect(page.locator('.kobun-llm summary')).toHaveCount(0);
+  await expect(page.locator('.kobun-llm')).toBeHidden();
+  await expect(page.locator('.kobun-reading__translate')).toBeHidden();
+  await expect(page.locator('.kobun-reading__translation')).toHaveText(translated);
+  await expect(page.locator('.kobun-reading__quality')).toHaveText('図書館で内容を確認し、公開したデータです。');
+  await page.locator('.kobun-reading__translate').dispatchEvent('click');
+  expect(runs).toBe(0);
+
+  await page.route(`${origin}/reading/start`, route => route.fulfill({ json:
+    route.request().postDataJSON().media_id === 1 ? published : publicData() }));
+  const changeCanvas = (canvas: string) => page.evaluate(canvas => {
+    (window as any).fixtureCanvas = canvas; (window as any).fixtureListeners.forEach((fn: () => void) => fn());
+  }, canvas);
+  await changeCanvas('c2');
+  await page.getByRole('button', { name: 'このページを翻刻する' }).click();
+  await page.getByRole('tab', { name: '現代語訳', exact: true }).click();
+  await expect(page.locator('.kobun-llm form')).toHaveCount(1);
+  await expect(page.locator('.kobun-llm summary')).toBeVisible();
+  await expect(page.locator('.kobun-reading__translation-empty-message')).toHaveText('現代語訳は保存されていません。');
+  // A checked transcription without an approved translation still supports a personal commercial translation.
+  await configure(page);
+  await expect(page.locator('.kobun-reading__translate')).toBeVisible();
+
+  await changeCanvas('c1');
+  await page.getByRole('button', { name: 'このページを翻刻する' }).click();
+  await page.getByRole('tab', { name: '現代語訳', exact: true }).click();
+  await expect(page.locator('.kobun-llm form')).toHaveCount(0);
+  await expect(page.locator('.kobun-reading__translate')).toBeHidden();
+  await expect(page.locator('.kobun-reading__translation')).toHaveText(translated);
+  await page.getByRole('tab', { name: '翻刻', exact: true }).click();
+  await expect(page.locator('.kobun-reading__transcription')).toHaveText(source);
+  expect(errors).toEqual([]);
+});
+
+for (const storage of ['memory', 'plain', 'encrypted']) {
+  test(`published translations retain only credential cleanup for ${storage} storage`, async ({ page }) => {
+    await publicFixture(page, true, undefined, { ...publicData(),
+      translation: { text: translated, method: 'machine', model: 'library-checked-model', warnings: [] } });
+    await client(page, `await api.saveLlm({provider:"openai",model:"fixture-text",storage:${JSON.stringify(storage)}},${JSON.stringify(fakeKey)},${JSON.stringify(passphrase)});`);
+    const saved = await page.evaluate(key => localStorage.getItem(key), storageKey);
+    expect(await client(page, 'return api.llmState();')).toMatchObject({ provider: 'openai', hasKey: true });
+    await expect(page.locator('.kobun-llm form')).toHaveCount(0);
+    await expect(page.locator('.kobun-llm summary')).toHaveCount(0);
+    await expect(page.locator('.kobun-reading__translate')).toBeHidden();
+    await expect(page.locator('.kobun-reading__translation')).toHaveText(translated);
+    await expect(page.locator('.kobun-reading__model')).toHaveText('使用モデル: library-checked-model');
+    await page.getByRole('tab', { name: '翻刻', exact: true }).click();
+    await page.getByRole('tab', { name: '現代語訳', exact: true }).click();
+    expect(await page.evaluate(key => localStorage.getItem(key), storageKey)).toBe(saved);
+    await page.getByRole('button', { name: '保存設定・キーを消去', exact: true }).click();
+    expect(await page.evaluate(key => localStorage.getItem(key), storageKey)).toBeNull();
+    expect(await client(page, 'return api.llmState();')).toMatchObject({ provider: 'local', hasKey: false });
+    await expect(page.locator('.kobun-llm')).toBeHidden();
+    await expect(page.locator('.kobun-reading__translate')).toBeHidden();
+    await expect(page.locator('.kobun-reading__translation')).toHaveText(translated);
+  });
+}
+
+test('unconfirmed cached translations retain settings for commercial generation', async ({ page }) => {
+  await publicFixture(page, true, undefined, { ...publicData(), quality: 'machine', label: '機械生成・未確認',
+    translation: { text: translated, method: 'machine', model: 'unreviewed-model', warnings: [] } });
+  await expect(page.locator('.kobun-llm summary')).toBeVisible();
+  await configure(page);
+  await expect(page.locator('.kobun-reading__translate')).toBeVisible();
+  await expect(page.locator('.kobun-reading__translation')).toHaveText(translated);
+});
+
 test('the public entry passes its module version to the window and LLM dependencies', async ({ page }) => {
   const html = execFileSync('php', ['tests/reading-fixture.php', 'enabled'], { encoding: 'utf8' })
     .replace('asset/reading.js"', 'asset/reading.js?v=fixture-update"');
