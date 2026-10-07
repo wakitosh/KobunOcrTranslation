@@ -7,13 +7,13 @@ export function publicReadingError(error: unknown, translation = true): string {
   const text = raw.replace(/^(?:ValueError|RuntimeError|Problem):\s*/, '');
   const help = '時間を置いても解消しない場合は、サイトの管理者にお問い合わせください。';
   if (/文脈上限|本文.*16000|送信する本文は/.test(text)) {
-    return 'このページの本文は、現代語訳サービスが対応する文字数の範囲外です。翻刻をご覧ください。';
+    return 'このページの本文は、現代語訳サービスが対応する文字数の範囲外です。';
   }
   if (/(?:訳|訳文).*途中.*終了|(?:訳文|現代語訳).*完了しませんでした|出力上限/.test(text)) {
-    return '現代語訳の生成が最後まで完了しませんでした。このページの翻刻をご覧ください。';
+    return '現代語訳の生成が最後まで完了しませんでした。';
   }
   if (/原文と(?:ほぼ)?同じ出力|現代語訳として採用しませんでした/.test(text)) {
-    return '現代語訳として十分な結果が得られなかったため、訳を表示できませんでした。翻刻をご覧ください。';
+    return '現代語訳として十分な結果が得られなかったため、訳を表示できませんでした。';
   }
   if (/URLError|<urlopen error|Connection refused|翻訳サーバに接続/.test(text)) {
     return translation
@@ -27,5 +27,5 @@ export function publicReadingError(error: unknown, translation = true): string {
     return translation ? `現代語訳のサービスは現在利用できません。${help}` : `画像の読み取りを完了できませんでした。${help}`;
   }
   if (/POSTで送信/.test(text)) return '操作を受け付けられませんでした。ページを再読み込みしてお試しください。';
-  return text || (translation ? '現代語訳を作成できませんでした。翻刻をご覧ください。' : '画像の読み取りを完了できませんでした。');
+  return text || (translation ? '現代語訳を作成できませんでした。' : '画像の読み取りを完了できませんでした。');
 }
