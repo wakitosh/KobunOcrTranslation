@@ -1,4 +1,5 @@
 import { llmState, subscribeLlm, mountLlmSettings, providerNames, confirmCommercial, translateCommercial, visitorLlmPolicy } from './dist/llm.js';
+import { mountReadingWindow } from './reading-window.js';
 
 (() => {
   'use strict';
@@ -43,7 +44,7 @@ import { llmState, subscribeLlm, mountLlmSettings, providerNames, confirmCommerc
     const warnings = get('warnings'), translateButton = get('translate'), state = get('state');
     const progress = get('progress'), model = get('model'), responsibility = get('responsibility');
     const attribution = get('attribution'), attributionList = attribution.querySelector('dl');
-    const dragHandle = get('modal-heading');
+    const readingWindow = mountReadingWindow(dialog);
     const tabs = [...root.querySelectorAll('.kobun-reading__tab')];
     const panels = [...root.querySelectorAll('.kobun-reading__tabpanel')];
     let selectedPage = null, current = null, timer = null, advancing = false, unsubscribe = null;
@@ -72,6 +73,7 @@ import { llmState, subscribeLlm, mountLlmSettings, providerNames, confirmCommerc
     };
     const stop = () => { if (timer) window.clearTimeout(timer); timer = null; };
     const closeDialog = () => {
+      readingWindow.save();
       if (dialog.open && dialog.close) dialog.close();
       else dialog.removeAttribute('open');
     };
@@ -79,6 +81,7 @@ import { llmState, subscribeLlm, mountLlmSettings, providerNames, confirmCommerc
       if (dialog.open) return;
       if (dialog.show) dialog.show();
       else dialog.setAttribute('open', '');
+      readingWindow.restore();
     };
     const setState = (text, className = 'kobun-reading__state') => {
       state.textContent = text; state.title = text; state.className = className;
@@ -291,31 +294,6 @@ import { llmState, subscribeLlm, mountLlmSettings, providerNames, confirmCommerc
     });
     tabs.forEach(tab => tab.addEventListener('click', () => activateTab(tab.dataset.tab)));
     get('close').addEventListener('click', closeDialog);
-    let drag = null;
-    dragHandle.addEventListener('pointerdown', event => {
-      if (event.button !== 0 || event.target.closest('button, a, input, select, textarea')) return;
-      const rect = dialog.getBoundingClientRect();
-      dialog.style.left = `${rect.left}px`; dialog.style.top = `${rect.top}px`;
-      dialog.style.right = 'auto'; dialog.style.bottom = 'auto'; dialog.style.margin = '0';
-      drag = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, left: rect.left, top: rect.top };
-      dragHandle.setPointerCapture(event.pointerId);
-      dragHandle.classList.add('is-dragging'); document.body.style.userSelect = 'none';
-      event.preventDefault();
-    });
-    dragHandle.addEventListener('pointermove', event => {
-      if (!drag || drag.pointerId !== event.pointerId) return;
-      const rect = dialog.getBoundingClientRect();
-      const left = Math.max(0, Math.min(window.innerWidth - Math.min(rect.width, window.innerWidth), drag.left + event.clientX - drag.x));
-      const top = Math.max(0, Math.min(window.innerHeight - Math.min(rect.height, window.innerHeight), drag.top + event.clientY - drag.y));
-      dialog.style.left = `${left}px`; dialog.style.top = `${top}px`;
-    });
-    const stopDragging = event => {
-      if (!drag || drag.pointerId !== event.pointerId) return;
-      if (dragHandle.hasPointerCapture(event.pointerId)) dragHandle.releasePointerCapture(event.pointerId);
-      drag = null; dragHandle.classList.remove('is-dragging'); document.body.style.userSelect = '';
-    };
-    dragHandle.addEventListener('pointerup', stopDragging);
-    dragHandle.addEventListener('pointercancel', stopDragging);
     window.addEventListener('keydown', event => { if (event.key === 'Escape' && dialog.open) closeDialog(); });
     if (translateButton) translateButton.addEventListener('click', async () => {
       if (!current || advancing || externalAbort || ['queued', 'running'].includes(current.job?.status)) return;

@@ -74,23 +74,56 @@
   z-index: 10000;
   inset: 1rem 1rem auto auto;
   width: min(34rem, calc(50vw - 1.5rem));
-  min-width: min(20rem, calc(100vw - 2rem));
+  min-width: min(20rem, calc(100vw - 16px));
   height: min(42rem, calc(100vh - 2rem));
-  min-height: 16rem;
-  max-width: calc(100vw - 2rem);
-  max-height: calc(100vh - 2rem);
+  min-height: min(16rem, calc(100vh - 16px));
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
   margin: 0;
   padding: 0;
   border: 0;
   border-radius: .5rem;
   box-shadow: 0 1rem 4rem #0006;
   color: #18251e;
-  overflow: auto;
-  resize: both;
+  box-sizing: border-box;
+  overflow: hidden;
+  resize: none;
   font-size: .875rem;
 }
-.kobun-reading__dialog[open] { display: block; }
+.kobun-reading__dialog[open] { display: flex; flex-direction: column; }
+.kobun-reading__window-body { flex: 1 1 auto; min-height: 0; overflow: auto; background: #fff; }
+.kobun-reading__resize-controls {
+  display: flex;
+  justify-content: space-between;
+  flex: 0 0 auto;
+  background: #f8fbf9;
+}
+.kobun-reading .kobun-reading__resize-handle {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 1.5rem;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #476457;
+  cursor: nwse-resize;
+  touch-action: none;
+}
+.kobun-reading__resize-handle span {
+  width: 12px;
+  height: 12px;
+  background: repeating-linear-gradient(135deg, transparent 0 3px, currentColor 3px 5px);
+  clip-path: polygon(100% 0, 100% 100%, 0 100%);
+}
+.kobun-reading .kobun-reading__resize-handle[data-resize-corner="left"] { cursor: nesw-resize; }
+.kobun-reading__resize-handle[data-resize-corner="left"] span { transform: scaleX(-1); }
+.kobun-reading .kobun-reading__resize-handle:hover,
+.kobun-reading .kobun-reading__resize-handle:focus-visible { background: #dcefe1; outline-offset: -2px; }
 .kobun-reading__modal-heading {
+  flex: 0 0 auto;
   position: sticky;
   z-index: 2;
   top: 0;
@@ -228,9 +261,9 @@
   .kobun-reading__dialog {
     inset: .5rem .5rem auto auto;
     width: calc(100vw - 1rem);
-    max-width: calc(100vw - 1rem);
+    max-width: calc(100vw - 16px);
     height: min(36rem, calc(100vh - 1rem));
-    max-height: calc(100vh - 1rem);
+    max-height: calc(100vh - 16px);
   }
   .kobun-reading__modal-heading,
   .kobun-reading__tabpanel { padding-left: 1rem; padding-right: 1rem; }

@@ -1,11 +1,12 @@
 {
   "name": "omeka-kobun-ocr-translation",
   "private": true,
-  "version": "0.10.2",
+  "version": "0.10.3",
   "type": "module",
   "scripts": {
     "build": "tsc --noEmit && vite build",
     "test:ui": "playwright test",
+    "test:reading": "playwright test --config playwright.reading.config.ts",
     "test:llm": "playwright test --config playwright.llm.config.ts",
     "test:policy": "php tests/visitor-policy.php"
   },

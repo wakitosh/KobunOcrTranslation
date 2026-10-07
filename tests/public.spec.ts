@@ -99,7 +99,7 @@ test('public item offers clearly labelled, site-scoped reading assistance', asyn
   const popup = panel.locator('.kobun-reading__dialog');
   await expect(popup).toBeVisible();
   expect(await popup.evaluate(element => element.matches(':modal'))).toBe(false);
-  expect(await popup.evaluate(element => getComputedStyle(element).resize)).toBe('both');
+  await expect(panel.locator('[data-resize-corner]')).toHaveCount(2);
   const beforeDrag = (await popup.boundingBox())!;
   const handle = (await panel.locator('[data-drag-handle]').boundingBox())!;
   await page.mouse.move(handle.x + 80, handle.y + 18);
@@ -154,7 +154,7 @@ test('public item offers clearly labelled, site-scoped reading assistance', asyn
 async function popupOrder(panel: import('@playwright/test').Locator) {
   return panel.locator('.kobun-reading__dialog').evaluate(dialog => {
     const firstPanel = dialog.querySelector('.kobun-reading__tabpanel');
-    return [...dialog.children].flatMap(element => {
+    return [...dialog.querySelector('.kobun-reading__window-body')!.children].flatMap(element => {
       if (element.classList.contains('kobun-reading__quality')) return ['quality'];
       if (element.classList.contains('kobun-reading__tabs')) return ['tabs'];
       if (element === firstPanel) return ['content'];
