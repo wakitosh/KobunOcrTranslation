@@ -1,4 +1,5 @@
 /** Visitor-owned credentials and direct HTTPS calls. No secrets enter Omeka requests. */
+export { publicReadingError } from './reading-errors';
 export type Provider = 'local' | 'openai' | 'anthropic' | 'google';
 export type StorageMode = 'memory' | 'plain' | 'encrypted';
 type Config = { provider: Provider; model: string; storage: StorageMode };
@@ -107,7 +108,12 @@ export async function saveLlm(value: Config, key = '', passphrase = '', policy?:
     try { localStorage.removeItem(STORAGE_KEY); } catch { /* Memory mode also works with storage disabled. */ }
   } else {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(record)); }
-    catch { throw new Error('ブラウザへの保存ができません。保存方法を「このページだけ」に変更してください。'); }
+    catch {
+      const canUseMemory = !policy || (policy.form_enabled && policy.storage_choice && policy.storage_modes.includes('memory'));
+      throw new Error(canUseMemory
+        ? 'ブラウザへの保存ができません。保存方法を「このページだけ」に変更してください。'
+        : 'ブラウザへの保存ができません。このブラウザのサイトデータ保存設定を確認してください。解消しない場合は、サイトの管理者にお問い合わせください。');
+    }
   }
   abortRequests(); config = { ...value }; configured = true; secret = key; stored = value.storage === 'memory' ? null : record; notify();
 }
@@ -253,6 +259,7 @@ export function mountLlmSettings(host: HTMLElement, policy?: LlmPolicy) {
     const unsubscribe = subscribeLlm(refresh); refresh();
     return () => { unsubscribe(); host.replaceChildren(); };
   }
+  const pageOnlyAvailable = !policy || (policy.storage_modes.includes('memory') && (policy.storage_choice || policy.default_storage === 'memory'));
   host.innerHTML = `<details><summary>現代語訳の設定</summary><form autocomplete="off">
     <label for="${id}-provider">使用するLLM</label><select id="${id}-provider" data-field="provider">
       <option value="local">図書館のローカルLLM</option><option value="openai">OpenAI (GPT)</option>
@@ -268,7 +275,7 @@ export function mountLlmSettings(host: HTMLElement, policy?: LlmPolicy) {
       <div data-passphrase><label for="${id}-passphrase">暗号化用パスフレーズ</label>
         <input id="${id}-passphrase" data-field="passphrase" type="password" autocomplete="new-password" placeholder="新規保存は12文字以上／解除は保存時のパスフレーズ">
         <p class="kobun-llm__hint">設定を変更して保存するときもパスフレーズを入力します。パスフレーズは保存しません。暗号化は保存中のキーを保護しますが、利用中の不正なスクリプトからは保護できません。</p></div>
-      <p class="kobun-llm__notice">翻刻本文とAPIキーをブラウザから選択サービスへHTTPSで送信します。API料金はキーの契約者負担です。共用端末では「このページだけ」を使い、利用後に「保存設定・キーを消去」を押してください。</p></div>
+      <p class="kobun-llm__notice">翻刻本文とAPIキーをブラウザから選択サービスへHTTPSで送信します。API料金はキーの契約者負担です。${pageOnlyAvailable ? '共用端末では「このページだけ」を使い、利用後に「保存設定・キーを消去」を押してください。' : '共用端末では、利用後に「保存設定・キーを消去」を押してください。'}</p></div>
     <p class="kobun-llm__hint">15分操作しないと、入力欄と利用中のキーを消去します。ブラウザへの保存を選んだ設定は残ります。</p>
     <div class="kobun-llm__actions"><button type="submit">設定・キーを登録</button>
       <button type="button" data-unlock>ロック解除</button><button type="button" data-lock>ロックする</button>
@@ -315,7 +322,11 @@ export function mountLlmSettings(host: HTMLElement, policy?: LlmPolicy) {
   };
   async function act(work: () => Promise<void> | void) {
     buttons.forEach(button => { button.disabled = true; }); status.textContent = '処理しています…';
-    try { await work(); } catch (error) { status.textContent = (error as Error).message; }
+    try { await work(); } catch (error) {
+      const message = (error as Error).message;
+      status.textContent = policy && !policy.model_choice && /モデル.*(?:確認|指定|変更)/.test(message)
+        ? '指定されたモデルに接続できませんでした。サイトの管理者にお問い合わせください。' : message;
+    }
     finally { buttons.forEach(button => { button.disabled = false; }); }
   }
   form.addEventListener('submit', event => { event.preventDefault(); void act(async () => {
@@ -331,7 +342,7 @@ export function mountLlmSettings(host: HTMLElement, policy?: LlmPolicy) {
     if (provider.value !== llmState(policy).provider) throw new Error('使用するサービスの設定・キーを先に登録してください。');
     const models = await listLlmModels(policy);
     host.querySelector('datalist')!.replaceChildren(...models.map(value => { const option = document.createElement('option'); option.value = value; return option; }));
-    status.textContent = `接続を確認し、${models.length}件のモデル候補を取得しました。モデルIDを選んで設定を登録してください。訳文生成のテストは行っていません。`;
+    status.textContent = `接続を確認し、${models.length}件のモデル候補を取得しました。${policy?.model_choice === false ? 'モデルは管理者の指定に従います。' : 'モデルIDを選んで設定を登録してください。'}訳文生成のテストは行っていません。`;
   }));
   const clearInputs = () => { key.value = ''; passphrase.value = ''; };
   details.addEventListener('toggle', () => { if (!details.open) clearInputs(); });

@@ -1,5 +1,7 @@
-import { llmState, subscribeLlm, mountLlmSettings, providerNames, confirmCommercial, translateCommercial, visitorLlmPolicy } from './dist/llm.js';
 import { mountReadingWindow } from './reading-window.js';
+// Relative module imports do not inherit Omeka's version query from reading.js.
+const { llmState, subscribeLlm, mountLlmSettings, providerNames, confirmCommercial, translateCommercial, visitorLlmPolicy, publicReadingError } =
+  await import(`./dist/llm.js${new URL(import.meta.url).search}`);
 
 (() => {
   'use strict';
@@ -155,13 +157,13 @@ import { mountReadingWindow } from './reading-window.js';
       }
     }, 150);
 
-    const showError = error => {
+    const showError = (error, translation = false) => {
       stop(); advancing = false; setProgress('');
       if (error.retryAfter > 0) {
         const retryTime = error.retryAt > 0
           ? new Date(error.retryAt * 1000).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })
           : '';
-        message.textContent = `${error.message}${retryTime ? ` 再試行の目安は${retryTime}です。` : ''}`;
+        message.textContent = `${publicReadingError(error, translation)}${retryTime ? ` 再試行の目安は${retryTime}です。` : ''}`;
         setState('利用上限'); startButton.disabled = true;
         startButton.textContent = retryTime ? `${retryTime}以降に再試行` : startLabel;
         timer = window.setTimeout(() => {
@@ -172,19 +174,19 @@ import { mountReadingWindow } from './reading-window.js';
         return;
       }
       startButton.textContent = startLabel; startButton.disabled = !selectedPage;
-      message.textContent = error.message; setState('利用できません');
+      message.textContent = publicReadingError(error, translation); setState('利用できません');
     };
     const run = async operation => {
       if (!current || advancing) return;
       advancing = true;
       try { current = await request(root.dataset.run, { id: current.id, operation }); render(current); }
-      catch (error) { showError(error); }
+      catch (error) { showError(error, operation === 'translate'); }
       finally { advancing = false; }
     };
     const poll = async () => {
       if (!current) return;
       try { current = await request(`${root.dataset.status}?id=${encodeURIComponent(current.id)}`); render(current); }
-      catch (error) { showError(error); }
+      catch (error) { showError(error, current.job?.operation === 'translate'); }
     };
     const render = data => {
       stop(); current = data;
@@ -230,7 +232,7 @@ import { mountReadingWindow } from './reading-window.js';
       attribution.hidden = entries.length === 0;
       const failed = data.job?.status === 'error';
       const translationFailed = failed && data.job.operation === 'translate';
-      if (failed && !translationFailed) message.textContent = data.job.error || '翻刻の処理に失敗しました。';
+      if (failed && !translationFailed) message.textContent = publicReadingError(data.job.error, false);
       if (active) {
         message.textContent = `${labels[data.job.operation] || '処理しています'}…`;
         if (data.job.operation === 'translate' && translationEnabled) {
@@ -275,11 +277,7 @@ import { mountReadingWindow } from './reading-window.js';
         }
         if (translationFailed && !privateTranslation && !externalAbort) {
           const p = document.createElement('p'); p.className = 'kobun-reading__warning';
-          const error = String(data.job.error || '');
-          const detail = /URLError|<urlopen error|Connection refused/.test(error)
-            ? '翻訳サーバに接続できませんでした。'
-            : error.replace(/^(?:ValueError|RuntimeError):\s*/, '') || '訳の作成中にエラーが発生しました。';
-          p.textContent = `前回の現代語訳の作成に失敗しました。${detail} 翻刻はそのまま閲覧できます。現代語訳を作るボタンから再実行できます。`;
+          p.textContent = `前回の現代語訳の作成に失敗しました。${publicReadingError(data.job.error)}`;
           warnings.prepend(p);
         }
       }
@@ -313,9 +311,14 @@ import { mountReadingWindow } from './reading-window.js';
       if (!settings.hasKey || !settings.model) {
         const details = get('llm-settings').querySelector('details');
         if (details) details.open = true;
-        externalStatus.textContent = policy.form_enabled
-          ? '許可された保存方法でモデルとAPIキーを登録するか、保存したキーのロックを解除してください。'
-          : '管理者により設定フォームが無効になっています。利用できるAPIキーが登録されていません。'; return;
+        if (!policy.form_enabled) externalStatus.textContent = '設定フォームが無効で、利用できるモデルまたはAPIキーがありません。サイトの管理者にお問い合わせください。';
+        else if (settings.locked) externalStatus.textContent = '現代語訳の設定で、保存したAPIキーのロックを解除してください。';
+        else if ((!settings.hasKey && !policy.key_input) || (!settings.model && !policy.model_choice)) externalStatus.textContent = '必要なモデルまたはAPIキーがなく、この画面では設定を変更できません。サイトの管理者にお問い合わせください。';
+        else externalStatus.textContent = '現代語訳の設定で、' + [
+          !settings.model ? 'モデルを指定してください。' : '',
+          !settings.hasKey ? '許可された保存方法でAPIキーを登録してください。' : '',
+        ].join('');
+        return;
       }
       const source = current.transcription || current.lines.map(line => line.text).join('\n');
       if (!confirmCommercial(source, policy)) return;
@@ -328,7 +331,7 @@ import { mountReadingWindow } from './reading-window.js';
         externalStatus.textContent = 'このページを開いている間だけ表示する、自分用の訳です。図書館の公開データには保存されません。';
       } catch (error) {
         if (externalAbort !== controller) return;
-        externalStatus.textContent = error.message;
+        externalStatus.textContent = publicReadingError(error);
       } finally {
         if (externalAbort === controller) { externalAbort = null; render(current); activateTab('translation'); }
       }

@@ -306,6 +306,24 @@ test('disabled public translation has no settings or translation tab', async ({ 
   await expect(page.getByRole('tab', { name: '現代語訳' })).toHaveCount(0);
 });
 
+test('the public entry passes its module version to the shared LLM dependency', async ({ page }) => {
+  const html = execFileSync('php', ['tests/reading-fixture.php', 'enabled'], { encoding: 'utf8' })
+    .replace('asset/reading.js"', 'asset/reading.js?v=fixture-update"');
+  await serveAssets(page, html);
+  const queries: string[] = [];
+  await page.route(`${origin}${assetPath}dist/llm.js*`, route => {
+    const url = new URL(route.request().url()); queries.push(url.search);
+    // Simulate an already cached dependency with none of the new exports.
+    return route.fulfill({ contentType: 'text/javascript', body: url.search
+      ? fs.readFileSync('asset/dist/llm.js') : 'export const oldModule = true;' });
+  });
+  await page.route(`${origin}/reading/start`, route => route.fulfill({ json: publicData() }));
+  await page.goto(origin);
+  await page.getByRole('button', { name: 'このページを翻刻する' }).click();
+  await expect(page.locator('.kobun-reading__transcription')).toHaveText(source);
+  expect(queries).toEqual(['?v=fixture-update']);
+});
+
 for (const enabled of [true, false]) {
   test(`a cached local translation failure does not report an OCR failure (translation ${enabled ? 'enabled' : 'disabled'})`, async ({ page }) => {
     await publicFixture(page, enabled, undefined, { ...publicData(), quality: 'machine', status: 'error',
@@ -314,7 +332,7 @@ for (const enabled of [true, false]) {
     if (enabled) {
       await expect(page.locator('.kobun-reading__warnings')).toContainText('前回の現代語訳');
       await expect(page.locator('.kobun-reading__warnings')).not.toContainText('URLError');
-      await expect(page.locator('.kobun-reading__warnings')).toContainText('再実行できます');
+      await expect(page.locator('.kobun-reading__warnings')).toContainText('しばらくしてから');
       await expect(page.locator('.kobun-reading__translation-empty-message')).toHaveText('現代語訳は保存されていません。');
       await expect(page.getByRole('button', { name: '実験的な現代語訳を作る' })).toBeEnabled();
       await page.getByRole('tab', { name: '翻刻', exact: true }).click();
@@ -324,6 +342,91 @@ for (const enabled of [true, false]) {
     await expect(page.getByRole('button', { name: 'このページを翻刻する' })).toBeEnabled();
   });
 }
+
+const storedEditorialErrors = [
+  ['truncated output', 'ValueError: 訳が途中で終了しました。範囲を絞って再実行してください。', '最後まで完了しませんでした'],
+  ['context limit', 'ValueError: 翻訳入力が文脈上限を超えます。選択行で範囲を絞って実行してください。', '対応する文字数'],
+  ['quality rejected', '原文とほぼ同じ出力のため、現代語訳として採用しませんでした。モデルまたは翻訳条件を見直してください。', '十分な結果'],
+  ['backend settings', '翻訳エンジンが要求を処理できませんでした（HTTP 500）。モデルの接続設定と実行記録を確認してください。', 'サイトの管理者'],
+  ['LLM installation', 'ローカルLLMは未導入です。モデルを導入するか、商用APIまたは訳文の直接入力を使用してください。', 'サイトの管理者'],
+];
+for (const [name, error, expected] of storedEditorialErrors) {
+  test(`saved ${name} error offers only public reading actions`, async ({ page }) => {
+    await publicFixture(page, true, undefined, { ...publicData(), quality: 'machine', status: 'error',
+      job: { operation: 'translate', status: 'error', error } });
+    const warning = page.locator('.kobun-reading__warnings');
+    await expect(warning).toContainText(expected);
+    await expect(warning).not.toContainText(/範囲を絞|選択行|見直してください|設定と実行記録|導入する|直接入力|ValueError|再実行できます/);
+    await page.getByRole('tab', { name: '翻刻', exact: true }).click();
+    await expect(page.locator('.kobun-reading__transcription')).toHaveText(source);
+  });
+}
+
+test('live local errors also omit instructions to edit a translation range', async ({ page }) => {
+  await publicFixture(page, true, undefined, { ...publicData(), quality: 'machine' });
+  await page.route(`${origin}/reading/run`, route => route.fulfill({ status: 503,
+    json: { error: '選択行で範囲を絞って実行してください。' } }));
+  await page.getByRole('button', { name: '実験的な現代語訳を作る' }).click();
+  await expect(page.locator('.kobun-reading__message')).toContainText('サイトの管理者');
+  await expect(page.locator('.kobun-reading__message')).not.toContainText(/範囲を|選択行/);
+});
+
+for (const provider of ['anthropic', 'google']) {
+  test(`${provider} truncated public generation never asks to edit the source or output limit`, async ({ page }) => {
+    await publicFixture(page); await configure(page, provider);
+    const data = provider === 'anthropic' ? { ...response(provider), stop_reason: 'max_tokens' }
+      : { candidates: [{ finishReason: 'MAX_TOKENS', content: { parts: [{ text: '未完の訳' }] } }] };
+    await page.route(provider === 'anthropic' ? 'https://api.anthropic.com/**' : 'https://generativelanguage.googleapis.com/**', route => route.fulfill({ json: data }));
+    page.once('dialog', dialog => dialog.accept());
+    await page.locator('.kobun-reading__translate').click();
+    await expect(page.locator('.kobun-reading__external-status')).toContainText('最後まで完了しませんでした');
+    await expect(page.locator('.kobun-reading__external-status')).not.toContainText(/本文の範囲|モデルを変更|出力上限/);
+    await expect(page.locator('.kobun-reading__translation')).toBeHidden();
+    // The editorial API preserves the actionable message for its text editor.
+    if (provider === 'anthropic') {
+      await expect(client(page, 'await api.translateCommercial("編集可能な本文");')).rejects.toThrow('本文の範囲を短く');
+    }
+  });
+}
+
+test('oversized public text is explained without suggesting an unavailable text editor', async ({ page }) => {
+  await publicFixture(page, true, undefined, { ...publicData(), transcription: source.repeat(1000) });
+  await configure(page);
+  let calls = 0;
+  await page.route('https://api.openai.com/**', route => { calls++; return route.abort(); });
+  page.once('dialog', dialog => dialog.accept());
+  await page.locator('.kobun-reading__translate').click();
+  await expect(page.locator('.kobun-reading__external-status')).toContainText('対応する文字数');
+  await expect(page.locator('.kobun-reading__external-status')).not.toContainText(/文字にしてください|範囲を/);
+  expect(calls).toBe(0);
+});
+
+test('storage failure cannot suggest a forbidden page-only storage mode', async ({ page }) => {
+  await publicFixture(page, true, { ...policyDefaults(), storage_modes: ['plain'], default_storage: 'plain' });
+  await expect(page.locator('.kobun-llm__notice')).not.toContainText('このページだけ');
+  await page.locator('.kobun-llm summary').click();
+  await page.getByLabel('使用するLLM').selectOption('openai');
+  await page.getByLabel('モデルID', { exact: true }).fill('fixture-text');
+  await page.getByLabel(/^APIキー/).fill(fakeKey);
+  await page.evaluate(key => {
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (name, value) {
+      if (name === key) throw new DOMException('Storage disabled', 'SecurityError');
+      return original.call(this, name, value);
+    };
+  }, storageKey);
+  await page.getByRole('button', { name: '設定・キーを登録', exact: true }).click();
+  await expect(page.locator('.kobun-llm__status')).toContainText('サイトデータ保存設定');
+  await expect(page.locator('.kobun-llm__status')).not.toContainText('このページだけ');
+});
+
+test('a public visitor with key input disabled is referred to the administrator', async ({ page }) => {
+  await publicFixture(page, true, { ...policyDefaults(), providers: ['openai'], default_provider: 'openai',
+    key_input: false, model_choice: false, models: { openai: 'fixture-text' } });
+  await page.locator('.kobun-reading__translate').click();
+  await expect(page.locator('.kobun-reading__external-status')).toContainText('サイトの管理者');
+  await expect(page.locator('.kobun-reading__external-status')).not.toContainText('APIキーを登録');
+});
 
 test('the default local LLM still follows the existing server job flow', async ({ page }) => {
   await publicFixture(page);
