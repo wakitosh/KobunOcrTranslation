@@ -15,7 +15,7 @@ return [
             'type' => Segment::class,
             'options' => [
                 'route' => '/s/:site-slug/kobun-reading/:action',
-                'constraints' => ['action' => 'start|status|run'],
+                'constraints' => ['action' => 'start|status|run|cache'],
                 'defaults' => [
                     'controller' => Controller\ReadingController::class,
                     '__SITE__' => true,

@@ -48,6 +48,26 @@ def fetch_image(url, hosts):
 def make_handler(store, token, config):
     downloads = threading.Semaphore(1)
 
+    def require_translation_ready():
+        try:
+            if not config.get('llm_model_id'):
+                raise ValueError('No model')
+            with urllib.request.urlopen(config['llm_url'] + '/health', timeout=2) as response:
+                if response.status != 200:
+                    raise ValueError('Not ready')
+        except Exception:
+            raise Problem('現代語訳のモデルは停止中または読み込み中です。準備が整ってから再実行してください。', 503)
+
+    def require_cache_engine(target):
+        if target == 'translation':
+            require_translation_ready()
+        else:
+            model_dir = Path(config.get('ndl_model_dir', Path(config.get('ndl_root', ''))/'src/model'))
+            if (not all((model_dir/name).is_file() for name in
+                ['rtmdet-s-1280x1280.onnx', 'parseq-ndl-32x384-tiny-10.onnx'])
+                or importlib.util.find_spec('onnxruntime') is None):
+                raise Problem('OCRの実行環境が準備されていません。管理画面で起動状態を確認してください。', 503)
+
     class Handler(BaseHTTPRequestHandler):
         server_version = "KobunOCR/0.1"
 
@@ -168,17 +188,15 @@ def make_handler(store, token, config):
                         if parts[2] == 'review' and self.command == 'PUT':
                             self.respond(200, store.save_review(ident, self.body()))
                             return
+                        if parts[2] == 'cache' and self.command == 'POST':
+                            body = self.body()
+                            doc = store.manage_cache(ident, body, before_regenerate=require_cache_engine)
+                            self.respond(202 if body['action'] == 'regenerate' else 200, doc)
+                            return
                         if parts[2] == "jobs" and self.command == "POST":
                             body = self.body()
                             if body.get('operation') == 'translate':
-                                try:
-                                    if not config.get('llm_model_id'):
-                                        raise ValueError('No model')
-                                    with urllib.request.urlopen(config['llm_url'] + '/health', timeout=2) as response:
-                                        if response.status != 200:
-                                            raise ValueError('Not ready')
-                                except Exception:
-                                    raise Problem('現代語訳のモデルは停止中または読み込み中です。準備が整ってから再実行してください。', 503)
+                                require_translation_ready()
                             self.respond(202, store.submit(ident, body))
                             return
                 raise Problem("操作が見つかりません。", 404)

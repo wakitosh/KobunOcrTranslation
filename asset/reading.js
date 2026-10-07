@@ -5,7 +5,7 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
 
 (() => {
   'use strict';
-  const labels = { layout: '画像内の行を検出しています', recognize: '文字を読み取っています', translate: '現代語訳を作っています' };
+  const labels = { layout: '画像内の行を検出しています', recognize: '文字を読み取っています', ocr: '翻刻を再生成しています', translate: '現代語訳を作っています' };
 
   const canvasId = canvas => String(canvas?.id || canvas?.['@id'] || '');
   const serviceId = canvas => {
@@ -46,11 +46,14 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
     const warnings = get('warnings'), translateButton = get('translate'), state = get('state');
     const progress = get('progress'), model = get('model'), responsibility = get('responsibility');
     const attribution = get('attribution'), attributionList = attribution.querySelector('dl');
+    const cacheControls = get('cache'), cacheMessage = get('cache-message');
+    const cacheButtons = [...root.querySelectorAll('[data-cache-target]')];
     const readingWindow = mountReadingWindow(dialog);
     const tabs = [...root.querySelectorAll('.kobun-reading__tab')];
     const panels = [...root.querySelectorAll('.kobun-reading__tabpanel')];
     let selectedPage = null, current = null, timer = null, advancing = false, unsubscribe = null;
     let externalAbort = null, privateTranslation = null;
+    let requestEpoch = 0, cacheBusy = false, cacheJob = null;
     let policy;
     try { policy = visitorLlmPolicy(JSON.parse(root.dataset.llmPolicy)); }
     catch { policy = visitorLlmPolicy(null); }
@@ -69,6 +72,22 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
     renderSettings(false);
     const externalStatus = get('external-status'), cancelTranslation = get('cancel-translation'), clearPrivate = get('clear-private');
     const cancelExternal = () => { if (externalAbort) externalAbort.abort(); externalAbort = null; };
+    const renderCacheControls = data => {
+      if (!cacheControls) return;
+      cacheControls.hidden = !(data?.can_manage_cache && data.quality === 'machine' && root.dataset.cache);
+      const busy = cacheBusy || advancing || !!externalAbort || ['queued', 'running'].includes(data?.job?.status);
+      if (data) {
+        startButton.disabled = busy || !selectedPage;
+        if (translateButton) translateButton.disabled = busy;
+      }
+      cacheButtons.forEach(button => {
+        const target = button.dataset.cacheTarget, deleting = button.dataset.cacheAction === 'delete';
+        const recognized = data?.lines?.length && data.lines.some(line => line.text?.trim());
+        button.disabled = busy || cacheControls.hidden || (target === 'translation'
+          ? !data?.translation_available || (deleting ? !data.translation : !recognized)
+          : deleting && !data?.lines?.length);
+      });
+    };
 
     const request = async (url, body) => {
       const response = await fetch(url, {
@@ -116,6 +135,9 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
       get('modal-title').textContent = name === 'translation' ? '現代語訳' : '翻刻';
     };
     const resetResult = () => {
+      requestEpoch++; cacheBusy = false; cacheJob = null;
+      if (cacheMessage) cacheMessage.textContent = '';
+      renderCacheControls(null);
       cancelExternal(); privateTranslation = null;
       renderSettings(false);
       if (externalStatus) externalStatus.textContent = '';
@@ -192,15 +214,17 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
     };
     const run = async operation => {
       if (!current || advancing) return;
+      const epoch = requestEpoch, id = current.id;
       advancing = true;
-      try { current = await request(root.dataset.run, { id: current.id, operation }); render(current); }
-      catch (error) { showError(error, operation === 'translate'); }
-      finally { advancing = false; }
+      try { const data = await request(root.dataset.run, { id, operation }); if (epoch === requestEpoch) render(data); }
+      catch (error) { if (epoch === requestEpoch) showError(error, operation === 'translate'); }
+      finally { if (epoch === requestEpoch) { advancing = false; renderCacheControls(current); } }
     };
     const poll = async () => {
       if (!current) return;
-      try { current = await request(`${root.dataset.status}?id=${encodeURIComponent(current.id)}`); render(current); }
-      catch (error) { showError(error, current.job?.operation === 'translate'); }
+      const epoch = requestEpoch, id = current.id, translating = current.job?.operation === 'translate';
+      try { const data = await request(`${root.dataset.status}?id=${encodeURIComponent(id)}`); if (epoch === requestEpoch) render(data); }
+      catch (error) { if (epoch === requestEpoch) showError(error, translating); }
     };
     const render = data => {
       stop(); current = data;
@@ -212,8 +236,16 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
       renderSettings(publishedTranslation);
       if (privateTranslation && privateTranslation.input !== data.transcription) privateTranslation = null;
       const active = ['queued', 'running'].includes(data.job?.status);
+      renderCacheControls(data);
+      if (cacheJob?.id === data.id && !active) {
+        const name = cacheJob.target === 'transcription' ? '機械翻刻' : '機械現代語訳';
+        cacheMessage.textContent = data.job?.status === 'error'
+          ? `${name}の再生成に失敗しました。以前の結果を保持しています。${publicReadingError(data.job.error, cacheJob.target === 'translation')}`
+          : `${name}の共有キャッシュを再生成しました。`;
+        cacheJob = null;
+      }
       startButton.textContent = startLabel;
-      startButton.disabled = active || !!externalAbort || !selectedPage;
+      startButton.disabled = active || cacheBusy || !!externalAbort || !selectedPage;
       setState(data.label, `kobun-reading__state is-${data.quality}`);
       quality.textContent = data.quality === 'published'
         ? '図書館で内容を確認し、公開したデータです。'
@@ -254,7 +286,8 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
       const translationFailed = failed && data.job.operation === 'translate';
       if (failed && !translationFailed) message.textContent = publicReadingError(data.job.error, false);
       if (active) {
-        message.textContent = `${labels[data.job.operation] || '処理しています'}…`;
+        message.textContent = `${labels[data.job.phase || data.job.operation] || '処理しています'}…`;
+        setProgress(message.textContent);
         if (data.job.operation === 'translate' && translationEnabled) {
           setProgress('現代語訳を生成しています…');
           openDialog(); activateTab('translation');
@@ -276,6 +309,9 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
         }));
         if (!failed || translationFailed) message.textContent = data.quality === 'published' ? '確認済みの内容を表示しました。' : '機械翻刻を表示しました。';
         openDialog();
+      } else {
+        transcription.textContent = '機械翻刻は保存されていません。';
+        if (!failed) message.textContent = 'このページの機械翻刻は保存されていません。翻刻ボタンから再生成できます。';
       }
       if (translationEnabled) {
         const shownTranslation = privateTranslation || data.translation;
@@ -304,7 +340,7 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
       if (translateButton) {
         const state = llmState(policy), commercial = state.provider !== 'local';
         translateButton.hidden = !(!publishedTranslation && data.lines.length && data.translation_available && (commercial || (data.quality === 'machine' && !data.translation)));
-        translateButton.disabled = !!externalAbort || active;
+        translateButton.disabled = cacheBusy || !!externalAbort || active;
         translateButton.textContent = commercial ? `${providerNames[state.provider]}で${privateTranslation ? '訳を作り直す' : '自分用の現代語訳を作る'}` : '実験的な現代語訳を作る';
         cancelTranslation.hidden = !externalAbort;
         clearPrivate.hidden = !privateTranslation;
@@ -313,16 +349,42 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
     };
 
     startButton.addEventListener('click', async () => {
-      if (!selectedPage) return;
+      if (!selectedPage || cacheBusy) return;
+      const epoch = requestEpoch, mediaId = Number(selectedPage.id);
       stop(); closeDialog(); message.textContent = '結果を確認しています…'; startButton.disabled = true;
-      try { current = await request(root.dataset.start, { media_id: Number(selectedPage.id) }); render(current); }
-      catch (error) { showError(error); }
+      try { const data = await request(root.dataset.start, { media_id: mediaId }); if (epoch === requestEpoch) render(data); }
+      catch (error) { if (epoch === requestEpoch) showError(error); }
     });
+    cacheButtons.forEach(button => button.addEventListener('click', async () => {
+      if (!current?.can_manage_cache || current.quality !== 'machine' || !root.dataset.cache
+        || cacheBusy || advancing || externalAbort || ['queued', 'running'].includes(current.job?.status)) return;
+      const target = button.dataset.cacheTarget, action = button.dataset.cacheAction;
+      const name = target === 'transcription' ? '機械翻刻' : '機械現代語訳';
+      const consequence = target === 'transcription' ? '\nこの翻刻に基づく機械現代語訳も削除されます。' : '';
+      const prompt = action === 'delete'
+        ? `この画像の共有${name}を削除しますか？${consequence}\n他の訪問者・サイトにも反映されます。操作履歴は保持します。`
+        : `この画像の共有${name}を再生成しますか？${consequence}\n以前の結果は成功時に置き換えます。他の訪問者・サイトにも反映されます。`;
+      if (!window.confirm(prompt)) return;
+      const epoch = requestEpoch, id = current.id, base_revision = current.revision;
+      cacheBusy = true; renderCacheControls(current);
+      cacheMessage.textContent = action === 'delete' ? '削除しています…' : '再生成を開始しています…';
+      try {
+        const data = await request(root.dataset.cache, { id, target, action, base_revision });
+        if (epoch !== requestEpoch) return;
+        cacheJob = action === 'regenerate' ? { id, target } : null;
+        cacheMessage.textContent = action === 'delete' ? `${name}の共有キャッシュを削除しました。` : '再生成を開始しました。処理結果を自動更新します。';
+        render(data);
+      } catch (error) {
+        if (epoch === requestEpoch) cacheMessage.textContent = publicReadingError(error, target === 'translation');
+      } finally {
+        if (epoch === requestEpoch) { cacheBusy = false; renderCacheControls(current); }
+      }
+    }));
     tabs.forEach(tab => tab.addEventListener('click', () => activateTab(tab.dataset.tab)));
     get('close').addEventListener('click', closeDialog);
     window.addEventListener('keydown', event => { if (event.key === 'Escape' && dialog.open) closeDialog(); });
     if (translateButton) translateButton.addEventListener('click', async () => {
-      if (!current || hasPublishedTranslation(current) || advancing || externalAbort || ['queued', 'running'].includes(current.job?.status)) return;
+      if (!current || hasPublishedTranslation(current) || cacheBusy || advancing || externalAbort || ['queued', 'running'].includes(current.job?.status)) return;
       const settings = llmState(policy);
       if (settings.provider === 'local') {
         translateButton.hidden = true; message.textContent = '現代語訳を準備しています…';

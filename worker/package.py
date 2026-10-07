@@ -8,7 +8,7 @@ import zipfile
 MODULE = Path(__file__).resolve().parent.parent
 ROOT_FILES = ['Module.php', 'README.md', 'CHANGELOG.md', 'DISTRIBUTION.md', 'INSTALL_RHEL9.md', 'LOCAL_MACOS.md', 'THIRD_PARTY_NOTICES.md', 'LICENSE',
     'package.json', 'package-lock.json', 'tsconfig.json', 'vite.config.js', 'playwright.config.ts', 'playwright.llm.config.ts', 'playwright.reading.config.ts',
-    'tests/llm.spec.ts', 'tests/service.spec.ts', 'tests/reading-window.spec.ts', 'tests/reading-fixture.php', 'tests/visitor-policy.php', 'tests/backend-config.php']
+    'tests/llm.spec.ts', 'tests/service.spec.ts', 'tests/cache-permissions.spec.ts', 'tests/reading-window.spec.ts', 'tests/reading-fixture.php', 'tests/visitor-policy.php', 'tests/backend-config.php']
 PATTERNS = ['config/*.php', 'config/*.ini', 'src/**/*.php', 'view/**/*.phtml', 'asset/dist/*', 'asset/*.js', 'asset/*.css',
     'ui/*.tsx', 'ui/*.ts', 'ui/*.css', 'licenses/*.txt', 'evaluation/*.json', 'worker/*.py',
     'worker/*.sh', 'worker/requirements.lock', 'worker/models.json', 'worker/vendor/ndlkotenocr/**/*']

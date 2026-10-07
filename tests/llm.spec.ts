@@ -34,9 +34,10 @@ async function serveAssets(page: Page, html: string) {
     return route.abort();
   });
 }
-async function publicFixture(page: Page, enabled = true, policy?: Record<string, unknown>, data: Record<string, unknown> = publicData()) {
+async function publicFixture(page: Page, enabled = true, policy?: Record<string, unknown>, data: Record<string, unknown> = publicData(), administrator = false) {
   const args = ['tests/reading-fixture.php', enabled ? 'enabled' : 'disabled'];
-  if (policy) args.push(JSON.stringify(policy));
+  if (policy || administrator) args.push(JSON.stringify(policy || policyDefaults()));
+  if (administrator) args.push('global_admin');
   await serveAssets(page, execFileSync('php', args, { encoding: 'utf8' }));
   await page.route(`${origin}/reading/start`, route => route.fulfill({ json: data }));
   await page.goto(origin);
@@ -63,6 +64,130 @@ const policyDefaults = () => ({
   form_enabled: true, provider_choice: true, model_choice: true, storage_choice: true, key_input: true, connection_test: true,
   providers: ['local', 'openai', 'anthropic', 'google'], storage_modes: ['memory', 'plain', 'encrypted'],
   default_provider: 'local', default_storage: 'memory', models: { openai: '', anthropic: '', google: '' },
+});
+
+const cachedData = () => ({ ...publicData(), quality: 'machine', label: '機械生成・未確認', status: 'translate',
+  transcription_credit: '', transcription_metadata: {}, can_manage_cache: true,
+  translation: { text: '以前の共有訳', model: '旧モデル', method: 'machine', warnings: [] } });
+
+test('cache controls are absent for visitors and hidden for published editorial data', async ({ page }) => {
+  await publicFixture(page, true, undefined, cachedData());
+  await expect(page.locator('.kobun-reading__cache')).toHaveCount(0);
+  await publicFixture(page, true, undefined, { ...publicData(), can_manage_cache: true }, true);
+  await expect(page.locator('.kobun-reading__cache')).toBeHidden();
+});
+
+test('administrator deletes only the shared translation after confirmation', async ({ page }) => {
+  const data = cachedData();
+  let requests = 0;
+  await publicFixture(page, true, undefined, data, true);
+  await page.locator('.kobun-reading__cache summary').click();
+  await page.route(`${origin}/reading/cache`, route => {
+    requests++;
+    expect(route.request().headers()['x-kobun-csrf']).toBe('fixture-csrf');
+    expect(route.request().postDataJSON()).toEqual({ id, target: 'translation', action: 'delete', base_revision: 4 });
+    return route.fulfill({ json: { ...data, revision: 5, translation: null, job: null, status: 'recognize' } });
+  });
+  page.once('dialog', dialog => dialog.dismiss());
+  await page.getByRole('button', { name: '現代語訳を削除', exact: true }).click();
+  expect(requests).toBe(0);
+  page.once('dialog', dialog => { expect(dialog.message()).toContain('他の訪問者・サイト'); return dialog.accept(); });
+  await page.getByRole('button', { name: '現代語訳を削除', exact: true }).click();
+  await expect(page.locator('.kobun-reading__cache-message')).toContainText('削除しました');
+  await expect(page.locator('.kobun-reading__translation')).toBeHidden();
+  await expect(page.locator('.kobun-reading__translation-empty-message')).toHaveText('現代語訳は保存されていません。');
+  await expect(page.locator('.kobun-reading__transcription')).toContainText(source);
+  await expect(page.getByRole('button', { name: '現代語訳を削除', exact: true })).toBeDisabled();
+});
+
+test('administrator cache regeneration uses the local worker despite commercial visitor settings', async ({ page }) => {
+  const data = cachedData();
+  await savedPlain(page);
+  await publicFixture(page, true, undefined, data, true);
+  await page.locator('.kobun-reading__cache summary').click();
+  await page.route(`${origin}/reading/cache`, route => {
+    expect(route.request().postDataJSON()).toEqual({ id, target: 'translation', action: 'regenerate', base_revision: 4 });
+    return route.fulfill({ json: { ...data, revision: 5, job: { operation: 'translate', status: 'running' } } });
+  });
+  await page.route(`${origin}/reading/status?**`, route => route.fulfill({ json: {
+    ...data, revision: 6, job: { operation: 'translate', status: 'completed' },
+    translation: { text: '新しい共有訳', model: '新モデル', warnings: [] },
+  } }));
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: '現代語訳を再生成', exact: true }).click();
+  await expect(page.locator('.kobun-reading__progress')).toContainText('現代語訳を生成');
+  await expect(page.locator('.kobun-reading__translation')).toHaveText('以前の共有訳');
+  await expect(page.getByRole('button', { name: '翻刻を削除', exact: true })).toBeDisabled();
+  await expect(page.locator('.kobun-reading__translation')).toHaveText('新しい共有訳');
+  await expect(page.locator('.kobun-reading__model')).toContainText('新モデル');
+  await expect(page.getByRole('button', { name: '翻刻を削除', exact: true })).toBeEnabled();
+});
+
+test('OCR regeneration refreshes transcription and invalidates its shared translation', async ({ page }) => {
+  const data = cachedData();
+  await publicFixture(page, true, undefined, data, true);
+  await page.locator('.kobun-reading__cache summary').click();
+  await page.route(`${origin}/reading/cache`, route => {
+    expect(route.request().postDataJSON()).toEqual({ id, target: 'transcription', action: 'regenerate', base_revision: 4 });
+    return route.fulfill({ json: { ...data, revision: 5, job: { operation: 'ocr', phase: 'layout', status: 'running' } } });
+  });
+  await page.route(`${origin}/reading/status?**`, route => route.fulfill({ json: { ...data, revision: 6,
+    lines: [{ order: 1, text: '再認識した翻刻', direction: 'vertical' }], transcription: '再認識した翻刻',
+    status: 'ocr', job: { operation: 'ocr', status: 'completed' }, translation: null,
+  } }));
+  page.once('dialog', dialog => { expect(dialog.message()).toContain('機械現代語訳も削除'); return dialog.accept(); });
+  await page.getByRole('button', { name: '翻刻を再生成', exact: true }).click();
+  await expect(page.locator('.kobun-reading__progress')).toContainText('行を検出');
+  await expect(page.locator('.kobun-reading__transcription')).toContainText(source);
+  await expect(page.locator('.kobun-reading__transcription')).toContainText('再認識した翻刻');
+  await expect(page.locator('.kobun-reading__translation')).toBeHidden();
+  await expect(page.locator('.kobun-reading__translate')).toBeVisible();
+});
+
+test('OCR deletion clears both cached texts and keeps regeneration available', async ({ page }) => {
+  const data = cachedData();
+  await publicFixture(page, true, undefined, data, true);
+  await page.locator('.kobun-reading__cache summary').click();
+  await page.route(`${origin}/reading/cache`, route => route.fulfill({ json: {
+    ...data, revision: 5, lines: [], transcription: '', translation: null, status: 'cache_deleted', job: null,
+  } }));
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: '翻刻を削除', exact: true }).click();
+  await expect(page.locator('.kobun-reading__transcription')).toHaveText('機械翻刻は保存されていません。');
+  await expect(page.locator('.kobun-reading__translation')).toBeHidden();
+  await expect(page.getByRole('button', { name: '翻刻を削除', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: '翻刻を再生成', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: '現代語訳を再生成', exact: true })).toBeDisabled();
+});
+
+test('cache admission failures preserve displayed text and reenable administrator controls', async ({ page }) => {
+  await publicFixture(page, true, undefined, cachedData(), true);
+  await page.locator('.kobun-reading__cache summary').click();
+  await page.route(`${origin}/reading/cache`, route => route.fulfill({ status: 409, json: { error: '別の画面で更新されました。ページを開き直してください。' } }));
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: '現代語訳を再生成', exact: true }).click();
+  await expect(page.locator('.kobun-reading__cache-message')).toContainText('別の画面で更新');
+  await expect(page.locator('.kobun-reading__translation')).toHaveText('以前の共有訳');
+  await expect(page.getByRole('button', { name: '現代語訳を再生成', exact: true })).toBeEnabled();
+});
+
+test('late cache responses cannot replace the newly selected Mirador page', async ({ page }) => {
+  const data = cachedData();
+  let release: (() => void) | undefined;
+  await publicFixture(page, true, undefined, data, true);
+  await page.locator('.kobun-reading__cache summary').click();
+  await page.route(`${origin}/reading/cache`, async route => {
+    await new Promise<void>(resolve => { release = resolve; });
+    await route.fulfill({ json: { ...data, translation: null, revision: 5 } });
+  });
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: '現代語訳を削除', exact: true }).click();
+  await expect.poll(() => !!release).toBe(true);
+  await page.evaluate(() => { (window as any).fixtureCanvas = 'c2'; (window as any).fixtureListeners.forEach((fn: () => void) => fn()); });
+  release!();
+  await expect(page.locator('.kobun-reading__dialog')).toBeHidden();
+  await expect(page.locator('.kobun-reading__state')).toHaveText('実行前');
+  await expect(page.locator('.kobun-reading__cache')).toBeHidden();
 });
 const policyClient = (page: Page, code: string) => client(page,
   'const policy=api.visitorLlmPolicy(JSON.parse(document.querySelector(".kobun-reading").dataset.llmPolicy));' + code);

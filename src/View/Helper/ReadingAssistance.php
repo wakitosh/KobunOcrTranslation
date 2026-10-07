@@ -50,6 +50,7 @@ class ReadingAssistance extends AbstractHelper
             'csrf' => (new Csrf(['name' => 'kobun_ocr_public', 'timeout' => 3600]))->getHash(),
             'translationEnabled' => (bool) $this->siteSettings->get('kobun_ocr_public_translation_enabled', false),
             'visitorLlmPolicy' => VisitorLlmPolicy::load($this->settings),
+            'cacheAdministrator' => ($identity = $this->getView()->identity()) && $identity->getRole() === 'global_admin',
         ]);
     }
 }

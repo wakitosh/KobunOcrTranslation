@@ -125,7 +125,7 @@ class Store:
             if doc.get("job", {}).get("status") in ("queued", "running"):
                 doc["job"].update(status="error", error="実行部が停止しました。保存済み状態から再実行してください。")
                 doc["status"] = "error"
-                self.commit(doc, "interrupted")
+                self.commit(doc, "interrupted", doc['job'].get('actor'))
 
     def directory(self, ident):
         if not isinstance(ident, str) or not re.fullmatch(r"[a-f0-9]{24}", ident):
@@ -427,16 +427,56 @@ class Store:
             self.maintenance = enabled
             return {'maintenance': self.maintenance}
 
-    def submit(self, ident, body):
+    def manage_cache(self, ident, body, *, before_regenerate=None):
+        """Maintain shared assistance results, independently of editorial data."""
+        if set(body) != {'target', 'action', 'base_revision', 'actor'}:
+            raise Problem('キャッシュ操作の指定が不正です。')
+        target, action, actor = body['target'], body['action'], body['actor']
+        if target not in ('transcription', 'translation') or action not in ('delete', 'regenerate'):
+            raise Problem('キャッシュ操作の指定が不正です。')
+        if (not isinstance(actor, dict) or set(actor) != {'id', 'name', 'role'}
+            or type(actor.get('id')) is not int or actor['id'] <= 0
+            or not isinstance(actor.get('name'), str) or not actor['name'].strip() or len(actor['name']) > 200
+            or actor.get('role') != 'global_admin'):
+            raise Problem('共有キャッシュの操作には全体管理者の権限が必要です。', 403)
+        with self.lock:
+            doc = self.get(ident)
+            if doc.get('workflow') != 'assist':
+                raise Problem('確認・公開用のデータはキャッシュ操作の対象外です。', 409)
+            self.check_revision(doc, body['base_revision'])
+            if action == 'regenerate':
+                if before_regenerate:
+                    before_regenerate(target)
+                return self.submit(ident, {
+                    'operation': 'ocr' if target == 'transcription' else 'translate',
+                    'base_revision': body['base_revision'],
+                }, cache_actor=actor)
+            doc.update(translation=None, translation_draft=None)
+            provenance = doc.setdefault('provenance', {})
+            provenance.pop('translate', None)
+            if target == 'transcription':
+                doc.update(lines=[], regions=[], status='cache_deleted', last_metrics={})
+                doc.pop('job', None)
+                for operation in ('layout', 'recognize', 'ocr'):
+                    provenance.pop(operation, None)
+            else:
+                doc['status'] = 'recognize' if doc['lines'] and all('raw' in line for line in doc['lines']) else 'image'
+                if doc.get('job', {}).get('operation') == 'translate':
+                    doc.pop('job', None)
+                    doc['last_metrics'] = {}
+            self.commit(doc, f'cache_{target}_deleted', actor)
+            return doc
+
+    def submit(self, ident, body, *, cache_actor=None):
         with self.lock:
             if self.maintenance:
                 raise Problem('実行サービスの切替中です。少し待ってから再実行してください。', 503)
             doc = self.get(ident)
             operation = body.get("operation")
-            if operation not in ("layout", "recognize", "translate"):
+            if operation not in ("layout", "recognize", "translate") and not (operation == 'ocr' and cache_actor):
                 raise Problem("未対応の処理です。")
             selected = body.get('line_ids')
-            draft = doc.get('translation_draft') if operation == 'translate' else None
+            draft = doc.get('translation_draft') if operation == 'translate' and not cache_actor else None
             if draft:
                 if selected is not None and selected != draft['line_ids']:
                     raise Problem('保存した翻訳用本文と行範囲が一致しません。')
@@ -466,8 +506,17 @@ class Store:
                 "input_revision": doc["revision"], "accepted_at": time.time()}
             if operation == 'translate':
                 job['input_text'] = draft['text'] if draft else ''.join(line.get('raw', '') for line in targets)
+            if cache_actor:
+                job['cache_target'] = 'transcription' if operation == 'ocr' else 'translation'
+                job['actor'] = cache_actor
+                # Admission and its history entry are one locked operation.
+                # Keep the previous usable result until inference succeeds.
+                job['input_revision'] = doc['revision'] + 1
             doc["job"] = job
-            self.write(doc)
+            if cache_actor:
+                self.commit(doc, f"cache_{job['cache_target']}_regeneration_requested", cache_actor)
+            else:
+                self.write(doc)
             self.pending += 1
             self.executor.submit(self.perform, ident, copy.deepcopy(job))
             return doc
@@ -507,26 +556,50 @@ class Store:
                     "reading_direction": doc.get('reading_direction', 'auto')}
                 if job['operation'] == 'translate':
                     payload['input_text'] = job['input_text']
-            result = self.runner(payload, folder)
+            if job['operation'] == 'ocr':
+                stages = {}
+                for operation in ('layout', 'recognize'):
+                    stage_folder = folder/operation
+                    stage_folder.mkdir()
+                    with self.lock:
+                        doc = self.get(ident)
+                        job['phase'] = operation
+                        doc['job'] = job
+                        self.write(doc)
+                    payload.update(operation=operation, run_dir=str(stage_folder))
+                    result = self.runner(payload, stage_folder)
+                    validate_lines(result['lines'], doc['width'], doc['height'])
+                    if not result['lines']:
+                        raise Problem('画像から文字行を検出できませんでした。')
+                    if operation == 'recognize' and any('raw' not in line for line in result['lines']):
+                        raise Problem('文字認識が完了しなかったため、以前の結果を保持しました。')
+                    stages[operation] = result['metrics']
+                    payload.update(lines=result['lines'], regions=result.get('regions', []))
+                result['stage_metrics'] = stages
+            else:
+                result = self.runner(payload, folder)
             with self.lock:
                 doc = self.get(ident)
                 if doc["revision"] != job["input_revision"] or doc["job"]["id"] != job["id"]:
                     raise Problem("入力の版が変わったため結果を採用しませんでした。", 409)
-                if job["operation"] in ("layout", "recognize"):
+                if job["operation"] in ("layout", "recognize", "ocr"):
                     validate_lines(result["lines"], doc["width"], doc["height"])
                     doc.update(lines=result["lines"], regions=result.get("regions", []), translation=None, translation_draft=None)
+                    doc.setdefault('provenance', {}).pop('translate', None)
                 else:
                     doc["translation"] = result["translation"]
                 metrics = {**result["metrics"], "queue_ms": (job["started_at"]-job["accepted_at"])*1000,
                     "end_to_end_ms": (time.time()-job["accepted_at"])*1000}
                 job.update(status="completed", finished_at=time.time(), metrics=metrics)
                 provenance = doc.setdefault('provenance', {})
-                provenance[job['operation']] = {key: metrics[key] for key in (
-                    'ndl_revision', 'weights_sha256', 'llm_model_sha256', 'llama_revision',
-                    'prompt_revision', 'engine_ms', 'end_to_end_ms') if key in metrics}
-                provenance[job['operation']]['recorded_at'] = time.time()
+                for operation, stage_metrics in result.get('stage_metrics', {job['operation']: metrics}).items():
+                    provenance[operation] = {key: stage_metrics[key] for key in (
+                        'ndl_revision', 'weights_sha256', 'llm_model_sha256', 'llama_revision',
+                        'prompt_revision', 'engine_ms', 'end_to_end_ms') if key in stage_metrics}
+                    provenance[operation]['recorded_at'] = time.time()
                 doc.update(job=job, last_metrics=metrics, status=job["operation"], publication_state='draft')
-                self.commit(doc, job["operation"])
+                event = f"cache_{job['cache_target']}_regenerated" if job.get('cache_target') else job['operation']
+                self.commit(doc, event, job.get('actor'))
         except Exception as exc:
             with self.lock:
                 doc = self.get(ident)
@@ -536,7 +609,7 @@ class Store:
                     'failure_type': type(exc).__name__, 'job_timeout_seconds': self.config.get('job_timeout', 300)}
                 job.update(status="error", error=error, finished_at=time.time(), metrics=metrics)
                 doc.update(job=job, status="error", last_metrics=metrics)
-                self.commit(doc, "error")
+                self.commit(doc, "error", job.get('actor'))
         finally:
             with self.lock:
                 self.pending -= 1

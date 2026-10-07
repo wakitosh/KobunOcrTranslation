@@ -7,6 +7,13 @@
   color: #18251e;
 }
 .kobun-reading [hidden] { display: none !important; }
+.kobun-reading__cache { margin: 1rem; padding: .75rem; border: 1px solid #c8d4cd; border-radius: .25rem; }
+.kobun-reading__cache summary { cursor: pointer; font-weight: 700; }
+.kobun-reading__cache p { font-size: .8rem; line-height: 1.6; }
+.kobun-reading__cache-row { display: flex; align-items: baseline; flex-wrap: wrap; gap: .5rem 1rem; }
+.kobun-reading__cache-row > div { display: flex; flex-wrap: wrap; gap: .5rem; }
+.kobun-reading .kobun-reading__cache [data-cache-action="delete"] { background: #fff; color: #8d302d; border: 1px solid #8d302d; }
+.kobun-reading__cache-message:empty { display: none; }
 .kobun-reading__modal-heading {
   display: flex;
   align-items: flex-start;

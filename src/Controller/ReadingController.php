@@ -49,6 +49,12 @@ class ReadingController extends AbstractActionController
         return $this->services()->get('Config')['kobun_ocr'];
     }
 
+    private function cacheAdministrator()
+    {
+        $identity = $this->services()->get('Omeka\\AuthenticationService')->getIdentity();
+        return $identity && $identity->getRole() === 'global_admin' ? $identity : null;
+    }
+
     private function enabled(bool $translation = false): bool
     {
         $settings = $this->services()->get('Omeka\Settings\Site');
@@ -280,6 +286,7 @@ class ReadingController extends AbstractActionController
                 'operation' => (string) ($doc['job']['operation'] ?? ''),
                 'status' => (string) ($doc['job']['status'] ?? ''),
                 'error' => (string) ($doc['job']['error'] ?? ''),
+                'phase' => (string) ($doc['job']['phase'] ?? ''),
             ] : null,
             'lines' => $lines,
             'writing_direction' => $writingDirection,
@@ -297,6 +304,7 @@ class ReadingController extends AbstractActionController
                 'warnings' => array_values((array) ($translation['review_warnings'] ?? [])),
             ] : null,
             'translation_available' => $translationEnabled,
+            'can_manage_cache' => ($doc['workflow'] ?? '') === 'assist' && $this->cacheAdministrator() !== null,
             'provenance' => [
                 'image_sha256' => (string) ($doc['image_sha256'] ?? ''),
                 'operations' => (array) ($doc['provenance'] ?? []),
@@ -359,6 +367,49 @@ class ReadingController extends AbstractActionController
         }
     }
 
+    public function cacheAction()
+    {
+        try {
+            // The cache is shared across sites. Site administrators and
+            // editorial contributors cannot change it through this endpoint.
+            $identity = $this->cacheAdministrator();
+            if (!$identity) {
+                throw new \RuntimeException('共有キャッシュの操作には全体管理者の権限が必要です。', 403);
+            }
+            if (!$this->enabled()) {
+                throw new \RuntimeException('このサイトでは閲覧支援を公開していません。', 404);
+            }
+            $body = $this->requirePost();
+            if (count($body) !== 4 || array_diff(array_keys($body), ['id', 'target', 'action', 'base_revision'])
+                || !is_string($body['id'] ?? null) || !is_int($body['base_revision'] ?? null)
+                || !in_array($body['target'] ?? null, ['transcription', 'translation'], true)
+                || !in_array($body['action'] ?? null, ['delete', 'regenerate'], true)) {
+                throw new \InvalidArgumentException('キャッシュ操作の指定が不正です。');
+            }
+            if ($body['target'] === 'translation' && !$this->enabled(true)) {
+                throw new \RuntimeException('このサイトでは機械現代語訳を公開していません。', 403);
+            }
+            $doc = $this->readPublicDocument($body['id']);
+            if (($doc['workflow'] ?? '') !== 'assist') {
+                throw new \RuntimeException('確認・公開用のデータはキャッシュ操作の対象外です。', 409);
+            }
+            // Maintenance always uses the library's local engine, independently
+            // of the visitor's provider/key and hourly generation allowance.
+            $updated = $this->decode($this->upstream('POST', 'documents/' . $doc['id'] . '/cache', [
+                'target' => $body['target'], 'action' => $body['action'],
+                'base_revision' => $body['base_revision'],
+                'actor' => ['id' => (int) $identity->getId(), 'name' => (string) $identity->getName(),
+                    'role' => (string) $identity->getRole()],
+            ]));
+            return $this->jsonResponse($this->publicData($updated), $body['action'] === 'regenerate' ? 202 : 200);
+        } catch (\JsonException | \InvalidArgumentException $e) {
+            return $this->jsonResponse(['error' => $e->getMessage()], 400);
+        } catch (\Throwable $e) {
+            $status = in_array((int) $e->getCode(), [403, 404, 409, 429, 503], true) ? (int) $e->getCode() : 503;
+            return $this->jsonResponse(['error' => $e->getMessage() ?: 'キャッシュを変更できません。'], $status);
+        }
+    }
+
     public function runAction()
     {
         try {
@@ -380,7 +431,8 @@ class ReadingController extends AbstractActionController
             if (($doc['workflow'] ?? 'editorial') !== 'assist') {
                 throw new \RuntimeException('確認済みデータに追加処理はできません。', 409);
             }
-            if ($operation === 'recognize' && (!$doc['lines'] || $doc['status'] === 'recognize')) {
+            if ($operation === 'recognize' && (!$doc['lines']
+                || !array_filter($doc['lines'], static fn ($line) => !array_key_exists('raw', $line)))) {
                 throw new \RuntimeException('文字認識を開始できる状態ではありません。', 409);
             }
             if ($operation === 'translate' && (!$doc['lines'] || array_filter($doc['lines'], static fn ($line) => !array_key_exists('raw', $line)))) {

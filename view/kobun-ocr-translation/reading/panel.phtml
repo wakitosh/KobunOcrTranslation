@@ -10,6 +10,7 @@ $dialogId = 'kobun-reading-dialog-' . bin2hex(random_bytes(4));
     data-start="<?= $this->escapeHtmlAttr($this->url('kobun-ocr-reading', $route + ['action' => 'start'])) ?>"
     data-status="<?= $this->escapeHtmlAttr($this->url('kobun-ocr-reading', $route + ['action' => 'status'])) ?>"
     data-run="<?= $this->escapeHtmlAttr($this->url('kobun-ocr-reading', $route + ['action' => 'run'])) ?>"
+    <?php if ($cacheAdministrator ?? false): ?>data-cache="<?= $this->escapeHtmlAttr($this->url('kobun-ocr-reading', $route + ['action' => 'cache'])) ?>"<?php endif; ?>
     data-csrf="<?= $this->escapeHtmlAttr($csrf) ?>" data-translation="<?= $translationEnabled ? '1' : '0' ?>"
     data-llm-policy="<?= $this->escapeHtmlAttr(json_encode($visitorLlmPolicy, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT)) ?>"
     data-pages="<?= $this->escapeHtmlAttr($pageData) ?>">
@@ -54,6 +55,20 @@ $dialogId = 'kobun-reading-dialog-' . bin2hex(random_bytes(4));
       </section>
       <p class="kobun-reading__responsibility" hidden></p>
       <details class="kobun-reading__provenance-details"><summary>生成情報と注意事項</summary><p>OCR: NDL古典籍OCR-Lite</p><p>「機械生成・未確認」の結果には、OCR誤認識や誤訳が含まれます。資料画像と照合してご利用ください。確認済みデータも研究上の校訂本文を意味するものではありません。</p></details>
+      <?php if ($cacheAdministrator ?? false): ?><details class="kobun-reading__cache" hidden>
+        <summary>管理者用：機械生成キャッシュ</summary>
+        <p>この画像の結果は訪問者・サイト間で共有されます。図書館の確認・公開用データとは別に管理します。削除しても操作履歴は保持します。</p>
+        <div class="kobun-reading__cache-row"><strong>機械翻刻</strong><div>
+          <button type="button" data-cache-target="transcription" data-cache-action="regenerate">翻刻を再生成</button>
+          <button type="button" data-cache-target="transcription" data-cache-action="delete">翻刻を削除</button>
+        </div></div>
+        <p>翻刻の再生成は行の検出・文字認識から行います。更新・削除時には、その翻刻に基づく機械現代語訳も削除します。</p>
+        <?php if ($translationEnabled): ?><div class="kobun-reading__cache-row"><strong>機械現代語訳</strong><div>
+          <button type="button" data-cache-target="translation" data-cache-action="regenerate">現代語訳を再生成</button>
+          <button type="button" data-cache-target="translation" data-cache-action="delete">現代語訳を削除</button>
+        </div></div><p>再生成には、図書館で現在設定しているローカルLLMを使用します。以前の結果は再生成の成功まで保持します。</p><?php endif; ?>
+        <p class="kobun-reading__cache-message" role="status" aria-live="polite"></p>
+      </details><?php endif; ?>
     </div>
     <div class="kobun-reading__resize-controls">
       <button type="button" class="kobun-reading__resize-handle" data-resize-corner="left" aria-label="左下からサイズを変更" title="ドラッグでサイズ変更（矢印キーでも調整できます）"><span aria-hidden="true"></span></button>
