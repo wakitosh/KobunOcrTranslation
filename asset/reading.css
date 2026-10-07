@@ -93,35 +93,44 @@
 .kobun-reading__dialog[open] { display: flex; flex-direction: column; }
 .kobun-reading__window-body { flex: 1 1 auto; min-height: 0; overflow: auto; background: #fff; }
 .kobun-reading__resize-controls {
+  position: absolute;
+  inset: auto 0 0;
   display: flex;
   justify-content: space-between;
-  flex: 0 0 auto;
-  background: #f8fbf9;
+  height: 1.5rem;
+  pointer-events: none;
 }
 .kobun-reading .kobun-reading__resize-handle {
   display: grid;
-  place-items: center;
-  width: 2rem;
+  place-items: end;
+  width: 1.5rem;
   height: 1.5rem;
   min-height: 0;
   margin: 0;
-  padding: 0;
+  padding: 0 3px 3px 0;
   border-radius: 0;
+  box-sizing: border-box;
   background: transparent;
-  color: #476457;
+  color: #929a95;
   cursor: nwse-resize;
   touch-action: none;
+  pointer-events: auto;
 }
 .kobun-reading__resize-handle span {
-  width: 12px;
-  height: 12px;
-  background: repeating-linear-gradient(135deg, transparent 0 3px, currentColor 3px 5px);
+  width: 9px;
+  height: 9px;
+  background: repeating-linear-gradient(135deg, transparent 0 3px, currentColor 3px 4px);
   clip-path: polygon(100% 0, 100% 100%, 0 100%);
 }
-.kobun-reading .kobun-reading__resize-handle[data-resize-corner="left"] { cursor: nesw-resize; }
+.kobun-reading .kobun-reading__resize-handle[data-resize-corner="left"] {
+  justify-items: start;
+  padding: 0 0 3px 3px;
+  cursor: nesw-resize;
+}
 .kobun-reading__resize-handle[data-resize-corner="left"] span { transform: scaleX(-1); }
 .kobun-reading .kobun-reading__resize-handle:hover,
-.kobun-reading .kobun-reading__resize-handle:focus-visible { background: #dcefe1; outline-offset: -2px; }
+.kobun-reading .kobun-reading__resize-handle:focus-visible { background: transparent; color: #526058; }
+.kobun-reading .kobun-reading__resize-handle:focus-visible { outline: 1px solid #929a95; outline-offset: -3px; }
 .kobun-reading__modal-heading {
   flex: 0 0 auto;
   position: sticky;
