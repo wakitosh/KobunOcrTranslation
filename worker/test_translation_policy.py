@@ -3,13 +3,28 @@ import io
 import tempfile
 from pathlib import Path
 import unittest
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from unittest.mock import patch
 from translation_policy import parse_translation, sampling_settings, check_text, REVISION, TEXT_REVISION, TEXT_PROMPT
-from engine import translate
+from engine import translate, local_json
 
 
 class TranslationPolicyTest(unittest.TestCase):
+    def test_local_connection_failure_is_actionable_without_retry(self):
+        for error in [URLError(ConnectionRefusedError(61, 'Connection refused')), TimeoutError('timed out')]:
+            with self.subTest(error=type(error).__name__), patch('engine.urllib.request.urlopen', side_effect=error) as call:
+                with self.assertRaisesRegex(ValueError, '翻訳サーバに接続できません') as result:
+                    local_json('http://local', '/apply-template', {'messages': []})
+                self.assertIs(result.exception.__cause__, error)
+                self.assertEqual(call.call_count, 1)
+
+    def test_http_error_remains_available_for_diagnostics(self):
+        error = HTTPError('http://local', 500, 'format', {}, io.BytesIO(b'{"error":"template format"}'))
+        with patch('engine.urllib.request.urlopen', side_effect=error):
+            with self.assertRaises(HTTPError) as result:
+                local_json('http://local', '/v1/chat/completions', {})
+            self.assertIs(result.exception, error)
+
     def test_uncertainty_is_tied_to_exact_input(self):
         raw = '夜はやこもなを、ほたるとびちがひたる。'
         content = {'translation': '夜は［判読困難］、蛍が飛び交っている。',

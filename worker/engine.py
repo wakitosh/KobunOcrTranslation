@@ -83,8 +83,14 @@ def local_json(base, endpoint, body, timeout=240, token_file=None):
         headers['Authorization'] = 'Bearer ' + Path(token_file).read_text().strip()
     req = urllib.request.Request(base.rstrip("/") + endpoint,
         data=json.dumps(body, ensure_ascii=False).encode(), headers=headers)
-    with urllib.request.urlopen(req, timeout=timeout) as response:
-        return json.load(response)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            return json.load(response)
+    except urllib.error.HTTPError:
+        # Preserve HTTP responses for the translation caller's diagnostics.
+        raise
+    except (urllib.error.URLError, TimeoutError, ConnectionError) as exc:
+        raise ValueError('翻訳サーバに接続できませんでした。管理者はモジュール設定の「実行サービス」でLLMサーバの起動状態を確認してください。') from exc
 
 
 def translate(payload, config):

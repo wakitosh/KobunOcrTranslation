@@ -229,7 +229,8 @@ import { mountReadingWindow } from './reading-window.js';
       }));
       attribution.hidden = entries.length === 0;
       const failed = data.job?.status === 'error';
-      if (failed) { message.textContent = data.job.error || '処理に失敗しました。'; startButton.disabled = !selectedPage; }
+      const translationFailed = failed && data.job.operation === 'translate';
+      if (failed && !translationFailed) message.textContent = data.job.error || '翻刻の処理に失敗しました。';
       if (active) {
         message.textContent = `${labels[data.job.operation] || '処理しています'}…`;
         if (data.job.operation === 'translate' && translationEnabled) {
@@ -251,7 +252,7 @@ import { mountReadingWindow } from './reading-window.js';
           p.className = `is-${line.direction === 'vertical' ? 'vertical' : 'horizontal'}`;
           p.textContent = line.text || '（判読結果なし）'; return p;
         }));
-        if (!failed) message.textContent = data.quality === 'published' ? '確認済みの内容を表示しました。' : '機械翻刻を表示しました。';
+        if (!failed || translationFailed) message.textContent = data.quality === 'published' ? '確認済みの内容を表示しました。' : '機械翻刻を表示しました。';
         openDialog();
       }
       if (translationEnabled) {
@@ -269,10 +270,17 @@ import { mountReadingWindow } from './reading-window.js';
           if (data.job?.operation === 'translate' && !failed) activateTab('translation');
         } else {
           translation.hidden = true; translation.textContent = ''; translationEmpty.hidden = false;
-          translationEmptyMessage.textContent = data.quality === 'published'
-            ? '現代語訳は保存されていません。'
-            : '現代語訳は機械生成で、内容は未確認です。';
+          translationEmptyMessage.textContent = '現代語訳は保存されていません。';
           model.hidden = true; model.textContent = '';
+        }
+        if (translationFailed && !privateTranslation && !externalAbort) {
+          const p = document.createElement('p'); p.className = 'kobun-reading__warning';
+          const error = String(data.job.error || '');
+          const detail = /URLError|<urlopen error|Connection refused/.test(error)
+            ? '翻訳サーバに接続できませんでした。'
+            : error.replace(/^(?:ValueError|RuntimeError):\s*/, '') || '訳の作成中にエラーが発生しました。';
+          p.textContent = `前回の現代語訳の作成に失敗しました。${detail} 翻刻はそのまま閲覧できます。現代語訳を作るボタンから再実行できます。`;
+          warnings.prepend(p);
         }
       }
       if (translateButton) {

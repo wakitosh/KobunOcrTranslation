@@ -34,11 +34,11 @@ async function serveAssets(page: Page, html: string) {
     return route.abort();
   });
 }
-async function publicFixture(page: Page, enabled = true, policy?: Record<string, unknown>) {
+async function publicFixture(page: Page, enabled = true, policy?: Record<string, unknown>, data: Record<string, unknown> = publicData()) {
   const args = ['tests/reading-fixture.php', enabled ? 'enabled' : 'disabled'];
   if (policy) args.push(JSON.stringify(policy));
   await serveAssets(page, execFileSync('php', args, { encoding: 'utf8' }));
-  await page.route(`${origin}/reading/start`, route => route.fulfill({ json: publicData() }));
+  await page.route(`${origin}/reading/start`, route => route.fulfill({ json: data }));
   await page.goto(origin);
   await page.getByRole('button', { name: 'このページを翻刻する' }).click();
   if (enabled) await page.getByRole('tab', { name: '現代語訳', exact: true }).click();
@@ -305,6 +305,25 @@ test('disabled public translation has no settings or translation tab', async ({ 
   await expect(page.locator('.kobun-llm')).toHaveCount(0);
   await expect(page.getByRole('tab', { name: '現代語訳' })).toHaveCount(0);
 });
+
+for (const enabled of [true, false]) {
+  test(`a cached local translation failure does not report an OCR failure (translation ${enabled ? 'enabled' : 'disabled'})`, async ({ page }) => {
+    await publicFixture(page, enabled, undefined, { ...publicData(), quality: 'machine', status: 'error',
+      job: { operation: 'translate', status: 'error', error: 'urllib.error.URLError: <urlopen error [Errno 61] Connection refused>' } });
+    await expect(page.locator('.kobun-reading__message')).toHaveText('機械翻刻を表示しました。');
+    if (enabled) {
+      await expect(page.locator('.kobun-reading__warnings')).toContainText('前回の現代語訳');
+      await expect(page.locator('.kobun-reading__warnings')).not.toContainText('URLError');
+      await expect(page.locator('.kobun-reading__warnings')).toContainText('再実行できます');
+      await expect(page.locator('.kobun-reading__translation-empty-message')).toHaveText('現代語訳は保存されていません。');
+      await expect(page.getByRole('button', { name: '実験的な現代語訳を作る' })).toBeEnabled();
+      await page.getByRole('tab', { name: '翻刻', exact: true }).click();
+      await expect(page.locator('.kobun-reading__warnings')).toBeHidden();
+    } else await expect(page.locator('.kobun-reading__warnings')).toHaveCount(0);
+    await expect(page.locator('.kobun-reading__transcription')).toHaveText(source);
+    await expect(page.getByRole('button', { name: 'このページを翻刻する' })).toBeEnabled();
+  });
+}
 
 test('the default local LLM still follows the existing server job flow', async ({ page }) => {
   await publicFixture(page);
