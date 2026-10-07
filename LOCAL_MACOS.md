@@ -17,7 +17,9 @@ python3 modules/KobunOcrTranslation/worker/install_control_macos.py \
 
 ## モデル切替とMetal実行
 
-モジュール設定画面でworkerとLLMサーバを停止し、モデルを取得・検証してから切り替えます。次は35B-A3BのQ4_K_M版をApple SiliconのGPUで実行する例です。モデルだけで22.29GBあり、十分な空き容量・メモリが必要です。
+取得済みモデルは、設定画面でLLMサーバを停止し、「起動するモデル」を選んでLLMサーバを起動すると切り替わります。workerの設定更新・復帰は自動です。CPU／Metalの方式は引き継ぎます。
+
+新しいモデルの取得や、CPUからMetalへの変更は設置者が行います。次は35B-A3BのQ4_K_M版を初めて取得し、Apple SiliconのGPUで実行する例です。モデルだけで22.29GBあり、十分な空き容量・メモリが必要です。実行方式の変更時は、設定画面でworkerとLLMサーバを停止してから以下を実行します。
 
 ```sh
 python3 modules/KobunOcrTranslation/worker/assets.py fetch \

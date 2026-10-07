@@ -18,7 +18,6 @@ const root = document.getElementById('kobun-workspace')!;
 const canManage = root.dataset.canManage === '1';
 const canEditTranscription = root.dataset.canEditTranscription === '1';
 const transcriptionScope = root.dataset.transcriptionScope === 'all' ? 'all' : 'owned';
-const preferredModel = root.dataset.preferredModel || '';
 const endpointUrl = (endpoint: string) => `${root.dataset.proxy}?endpoint=${encodeURIComponent(endpoint)}`;
 async function readResponse(response: Response) {
   if (!response.headers.get('content-type')?.includes('json')) throw new Error('ログイン状態と接続を確認し、ページを再読み込みしてください。');
@@ -552,7 +551,7 @@ function Workspace() {
         </select></div>
       <div className="kobun-utilities"><span className="kobun-muted">{canManage ? '管理者 · 全工程を操作可能' : canEditTranscription
         ? `翻刻修正者 · ${transcriptionScope === 'all' ? '閲覧可能な全資料' : '自分が所有する資料'}のみ` : '閲覧のみ'}</span>
-        <span className="kobun-muted">{health ? `OCR ${health.ocr_ready ? '準備済み' : '未準備'} · 現代語訳 ${health.llm_ready ? '準備済み' : '未準備'}${health.llm_ready && preferredModel && health.llm_model_id && health.llm_model_id !== preferredModel ? '（設定と実行モデルが不一致）' : ''}` : '接続を確認中'}</span>
+        <span className="kobun-muted">{health ? `OCR ${health.ocr_ready ? '準備済み' : '未準備'} · 現代語訳 ${health.llm_ready ? '準備済み' : '未準備'}${health.llm_model ? ` · ${health.llm_model}` : ''}` : '接続を確認中'}</span>
         {doc && <span className={`kobun-publication is-${doc.publication_state || 'draft'}`}>{publicationLabels[doc.publication_state || 'draft']}</span>}</div></div>
     <ol className="kobun-steps" aria-label="作業の手順">{steps.map((step, i) => <li key={step.id}>
       <button aria-current={stage === step.id ? 'step' : undefined} disabled={busy || (i === 1 && !doc) || (i > 1 && !hasText)} onClick={() => go(step.id)}><span>{i + 1}</span>{step.title}</button>

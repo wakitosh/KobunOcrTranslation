@@ -10,7 +10,6 @@ $this->headScript()->appendFile($this->assetUrl('dist/workspace.js', 'KobunOcrTr
      data-csrf="<?= $this->escapeHtmlAttr($csrf) ?>"
      data-can-manage="<?= $canManageWorkflow ? '1' : '0' ?>"
      data-can-edit-transcription="<?= $canEditTranscription ? '1' : '0' ?>"
-     data-preferred-model="<?= $this->escapeHtmlAttr($preferredModel) ?>"
      data-transcription-scope="<?= $this->escapeHtmlAttr($transcriptionScope) ?>">
     <p>ワークスペースを読み込んでいます。</p>
 </div>

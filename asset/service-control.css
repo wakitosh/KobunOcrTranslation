@@ -12,3 +12,9 @@
 #kobun-service-control button { cursor: pointer; }
 #kobun-service-control button:disabled { cursor: not-allowed; }
 #kobun-service-message { min-height: 1.5em; }
+#kobun-service-control .kobun-service-model { margin: 1rem 0; }
+#kobun-service-control .kobun-service-model label { display: block; margin-bottom: .4rem; font-weight: 700; }
+#kobun-service-control .kobun-service-model select { width: 100%; max-width: 50rem; }
+#kobun-service-model-help { color: #52645a; }
+#kobun-service-control summary { cursor: pointer; }
+#kobun-service-control code { overflow-wrap: anywhere; }

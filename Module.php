@@ -90,22 +90,18 @@ class Module extends AbstractModule
         $html = $renderer->partial('kobun-ocr-translation/config/visitor-policy', [
             'policy' => VisitorLlmPolicy::load($services->get('Omeka\Settings')),
         ]);
-        $html .= '<fieldset><legend>現代語訳モデル</legend>'
-            . '<p>サーバへダウンロードして使用するモデルを選びます。モデルは巨大なため、設定保存時には取得しません。保存後、表示されたコマンドをサーバ管理者が実行してください。</p>'
-            . '<div class="field"><div class="field-meta"><label for="kobun-ocr-llm-model">ダウンロードするモデル</label></div><div class="inputs">'
-            . '<select id="kobun-ocr-llm-model" name="kobun_ocr_llm_model_profile">';
+        $modelOptions = '';
+        $modelDownloads = '';
         foreach ($models as $model) {
             $id = (string) ($model['id'] ?? '');
             $size = ((int) ($model['size_bytes'] ?? 0)) / 1000000000;
-            $html .= '<option value="' . $renderer->escapeHtmlAttr($id) . '"' . ($id === $selectedModel ? ' selected' : '') . '>'
+            $modelOptions .= '<option value="' . $renderer->escapeHtmlAttr($id) . '"' . ($id === $selectedModel ? ' selected' : '') . '>'
                 . $renderer->escapeHtml((string) ($model['name'] ?? $id) . sprintf('（%.2f GB、%s）', $size, (string) ($model['license'] ?? ''))) . '</option>';
+            $modelDownloads .= '<li>' . $renderer->escapeHtml((string) ($model['name'] ?? $id))
+                . ': <code>python3 modules/KobunOcrTranslation/worker/assets.py fetch --runtime /path/to/private/runtime --model '
+                . $renderer->escapeHtml($id) . '</code></li>';
         }
-        $html .= '</select><p class="explanation">35B-A3Bは推論時に一部のパラメータを使うMoEモデルですが、重み全体を保持するメモリが必要です。容量だけでは訳質や速度を判断できないため、設置先で比較してください。</p></div></div>'
-            . '<p>取得: <code>python3 modules/KobunOcrTranslation/worker/assets.py fetch --runtime /path/to/private/runtime --ocr --model '
-            . $renderer->escapeHtml($selectedModel) . '</code></p>'
-            . '<p>切替: 設定画面でworkerとLLMサーバを停止してから <code>python3 modules/KobunOcrTranslation/worker/manage.py init --runtime /path/to/private/runtime --model '
-            . $renderer->escapeHtml($selectedModel) . '</code> を実行し、設定画面から両サービスを起動します。</p></fieldset>'
-            . '<fieldset><legend>翻刻を修正できる役割と資料範囲</legend>'
+        $html .= '<fieldset><legend>翻刻を修正できる役割と資料範囲</legend>'
             . '<p>グローバル管理者とサイト管理者は常に全資料を扱えます。追加する役割ごとに、Omekaでその利用者が所有する資料だけを許可するか、閲覧できる全資料を許可するかを選びます。</p>';
         foreach ($acl->getRoleLabels(true) as $role => $label) {
             if (in_array($role, ['global_admin', 'site_admin'], true)) {
@@ -139,6 +135,14 @@ class Module extends AbstractModule
                 . '<div class="kobun-service-row" data-service="llama"><strong>LLMサーバ</strong> <span class="kobun-service-status" role="status">確認中…</span>'
                 . '<span class="kobun-service-actions"><button type="button" data-action="start">起動</button> '
                 . '<button type="button" data-action="stop">停止</button> <button type="button" data-action="restart">再起動</button></span></div>'
+                . '<div class="kobun-service-model"><label for="kobun-ocr-llm-model">起動するモデル</label>'
+                . '<select id="kobun-ocr-llm-model" disabled>' . $modelOptions . '</select>'
+                . '<p id="kobun-service-model-help">状態を確認しています…</p>'
+                . '<p>LLMサーバを停止 → 取得済みモデルを選択 → LLMサーバを起動、の順に操作します。設定フォームの保存は不要です。workerの設定更新と復帰は自動で行います。</p>'
+                . '<p>35B-A3Bは推論時に一部のパラメータを使うMoEモデルですが、重み全体を保持するメモリが必要です。設置先の資源上限と訳質・速度を確認してください。</p>'
+                . '<details><summary>未取得モデルの導入方法</summary>'
+                . '<p>初回の取得・実行環境の構築はサーバ管理者が行います。モデルは設定保存や起動操作ではダウンロードしません。実際の非公開ランタイムのパスを指定してください。</p>'
+                . '<ul>' . $modelDownloads . '</ul></details></div>'
                 . '<p><button type="button" id="kobun-service-refresh">状態を更新</button></p>'
                 . '<p id="kobun-service-message" role="status" aria-live="polite"></p></fieldset>'
                 . '<link rel="stylesheet" href="' . $renderer->escapeHtmlAttr($renderer->assetUrl('service-control.css', 'KobunOcrTranslation')) . '">'
@@ -151,13 +155,6 @@ class Module extends AbstractModule
     {
         $services = $this->getServiceLocator();
         $acl = $services->get('Omeka\Acl');
-        $model = (string) $controller->params()->fromPost('kobun_ocr_llm_model_profile', '');
-        $catalog = json_decode((string) file_get_contents(__DIR__ . '/worker/models.json'), true);
-        $validModels = array_column((array) ($catalog['llm'] ?? []), 'id');
-        if (!in_array($model, $validModels, true)) {
-            $controller->messenger()->addError('現代語訳モデルを選択してください。');
-            return false;
-        }
         $submitted = $controller->params()->fromPost('kobun_ocr_transcription_roles', []);
         try {
             $policy = VisitorLlmPolicy::validate($controller->params()->fromPost(VisitorLlmPolicy::SETTING, []));
@@ -176,7 +173,6 @@ class Module extends AbstractModule
         }
         $services->get('Omeka\Settings')->set('kobun_ocr_transcription_roles', $roles);
         $services->get('Omeka\Settings')->set('kobun_ocr_transcription_scopes', $scopes);
-        $services->get('Omeka\Settings')->set('kobun_ocr_llm_model_profile', $model);
         $services->get('Omeka\Settings')->set(VisitorLlmPolicy::SETTING, $policy);
         return true;
     }

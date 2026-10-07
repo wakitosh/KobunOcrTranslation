@@ -72,13 +72,21 @@ class WorkspaceController extends AbstractActionController
                 }
                 $body = json_decode($request->getContent(), true, 8, JSON_THROW_ON_ERROR);
                 if (!is_array($body) || !in_array($body['service'] ?? null, ['worker', 'llama'], true)
-                    || !in_array($body['action'] ?? null, ['start', 'stop', 'restart'], true)) {
+                    || !in_array($body['action'] ?? null, ['start', 'stop', 'restart'], true)
+                    || array_diff(array_keys($body), ['service', 'action', 'model_id'])) {
                     throw new \InvalidArgumentException('不正なサービス操作です。');
                 }
-                $body = ['service' => $body['service'], 'action' => $body['action']];
+                if (array_key_exists('model_id', $body)) {
+                    $catalog = json_decode((string) file_get_contents(dirname(__DIR__, 2) . '/worker/models.json'), true);
+                    if ($body['service'] !== 'llama' || $body['action'] !== 'start'
+                        || !is_string($body['model_id'])
+                        || !in_array($body['model_id'], array_column($catalog['llm'], 'id'), true)) {
+                        throw new \InvalidArgumentException('LLMサーバの起動時に登録済みモデルを選択してください。');
+                    }
+                }
             }
             $client = new Client(rtrim((string) ($options['control_url'] ?? ''), '/') . ($method === 'GET' ? '/status' : '/control'),
-                ['timeout' => 130, 'maxredirects' => 0]);
+                ['timeout' => 300, 'maxredirects' => 0]);
             $client->setMethod($method);
             $client->setHeaders(['Authorization' => 'Bearer ' . trim($token)]);
             if ($body !== null) {
@@ -87,7 +95,12 @@ class WorkspaceController extends AbstractActionController
             }
             $upstream = $client->send();
             $this->getResponse()->setStatusCode($upstream->getStatusCode());
-            return $this->jsonResponse(json_decode($upstream->getBody(), true, 16, JSON_THROW_ON_ERROR));
+            $result = json_decode($upstream->getBody(), true, 16, JSON_THROW_ON_ERROR);
+            if ($method === 'POST' && $upstream->isSuccess() && isset($result['llama']['model_id'])) {
+                $this->getEvent()->getApplication()->getServiceManager()->get('Omeka\Settings')
+                    ->set('kobun_ocr_llm_model_profile', $result['llama']['model_id']);
+            }
+            return $this->jsonResponse($result);
         } catch (\InvalidArgumentException | \JsonException $e) {
             $this->getResponse()->setStatusCode(400);
             return $this->jsonResponse(['error' => $e->getMessage()]);
@@ -141,13 +154,11 @@ class WorkspaceController extends AbstractActionController
 
     public function indexAction()
     {
-        $settings = $this->getEvent()->getApplication()->getServiceManager()->get('Omeka\Settings');
         return new ViewModel([
             'csrf' => (new Csrf(['name' => 'kobun_ocr', 'timeout' => 3600]))->getHash(),
             'canManageWorkflow' => $this->isAdministrator(),
             'canEditTranscription' => $this->canEditTranscription(),
             'transcriptionScope' => $this->transcriptionScope(),
-            'preferredModel' => (string) $settings->get('kobun_ocr_llm_model_profile', 'qwen35-9b-q4km'),
         ]);
     }
 

@@ -7,6 +7,7 @@ import signal
 import secrets
 import subprocess
 import sys
+import tempfile
 import time
 from assets import catalog, model_entry, verify
 
@@ -35,6 +36,19 @@ def owned(name, entry):
     except OSError:
         return False
     return entry['marker'] in result.stdout
+
+
+def write_config(runtime, config):
+    """Readers see either the old or the complete new private configuration."""
+    with tempfile.NamedTemporaryFile(mode='w', dir=runtime, prefix='.config-', delete=False) as stream:
+        temporary = Path(stream.name)
+        try:
+            json.dump(config, stream, ensure_ascii=False, indent=2)
+            stream.flush()
+            os.fsync(stream.fileno())
+            os.replace(temporary, runtime/'config.json')
+        finally:
+            temporary.unlink(missing_ok=True)
 
 
 def initialize(runtime, model_id=None, ocr_only=False, llm_backend=None):
@@ -76,7 +90,7 @@ def initialize(runtime, model_id=None, ocr_only=False, llm_backend=None):
         'sampling': {'temperature': 0}, 'no_repack': False, 'skip_chat_parsing': False,
         **(entry.get('translation_profile', {}) if entry else {})}
     config.pop('ndl_root', None)
-    file.write_text(json.dumps(config, ensure_ascii=False, indent=2)); file.chmod(0o600)
+    write_config(runtime, config)
     return config
 
 

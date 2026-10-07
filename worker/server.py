@@ -95,7 +95,10 @@ def make_handler(store, token, config):
                     ocr = ocr and importlib.util.find_spec("onnxruntime") is not None
                     self.respond(200, {"ocr_ready": ocr, "llm_ready": ready, "pending": store.pending, "max_pending": 4,
                         "worker_concurrency": 1, "ndl_revision": config["ndl_revision"], "llm_model": config["llm_model"],
-                        "llm_model_id": config.get("llm_model_id", "")})
+                        "llm_model_id": config.get("llm_model_id", ""), 'maintenance': store.maintenance})
+                    return
+                if parts == ['maintenance'] and self.command == 'POST':
+                    self.respond(200, store.set_maintenance(self.body().get('enabled')))
                     return
                 if parts == ["documents"]:
                     if self.command == "GET":
@@ -164,7 +167,17 @@ def make_handler(store, token, config):
                             self.respond(200, store.save_review(ident, self.body()))
                             return
                         if parts[2] == "jobs" and self.command == "POST":
-                            self.respond(202, store.submit(ident, self.body()))
+                            body = self.body()
+                            if body.get('operation') == 'translate':
+                                try:
+                                    if not config.get('llm_model_id'):
+                                        raise ValueError('No model')
+                                    with urllib.request.urlopen(config['llm_url'] + '/health', timeout=2) as response:
+                                        if response.status != 200:
+                                            raise ValueError('Not ready')
+                                except Exception:
+                                    raise Problem('現代語訳のモデルは停止中または読み込み中です。準備が整ってから再実行してください。', 503)
+                            self.respond(202, store.submit(ident, body))
                             return
                 raise Problem("操作が見つかりません。", 404)
             except Problem as exc:

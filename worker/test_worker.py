@@ -60,6 +60,22 @@ class WorkerTest(unittest.TestCase):
             time.sleep(0.01)
         self.fail('job did not finish')
 
+    def test_maintenance_rejects_new_jobs_and_cannot_interrupt_running_work(self):
+        self.assertEqual(self.store.set_maintenance(True), {'maintenance': True})
+        with self.assertRaisesRegex(Problem, '切替中'):
+            self.store.submit(self.doc['id'], {'operation': 'layout', 'base_revision': self.doc['revision']})
+        self.assertEqual(self.calls, [])
+        self.store.set_maintenance(False)
+        self.store.submit(self.doc['id'], {'operation': 'layout', 'base_revision': self.doc['revision']})
+        self.assertTrue(self.started.wait(2))
+        with self.assertRaisesRegex(Problem, '処理中'):
+            self.store.set_maintenance(True)
+        self.assertFalse(self.store.maintenance)
+        self.release.set(); self.wait_done()
+        self.store.set_maintenance(True)
+        for value in (None, 1, 'true'):
+            with self.assertRaises(Problem): self.store.set_maintenance(value)
+
     def test_invalid_geometry_and_duplicate_ids(self):
         for value in [float('nan'), float('inf'), -1, True, '2']:
             row = line(); row['x'] = value
@@ -405,6 +421,25 @@ class WorkerTest(unittest.TestCase):
             self.assertEqual(error.exception.code, 401)
             with urllib.request.urlopen(urllib.request.Request(url, headers={'Authorization': 'Bearer secret'})) as response:
                 self.assertEqual(len(json.load(response)), 1)
+            maintenance = url.replace('/documents', '/maintenance')
+            for token, status in (('wrong', 401), ('secret', 200)):
+                request = urllib.request.Request(maintenance, data=b'{"enabled":true}',
+                    headers={'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'})
+                if status == 401:
+                    with self.assertRaises(urllib.error.HTTPError) as error: urllib.request.urlopen(request)
+                    self.assertEqual(error.exception.code, status)
+                    self.assertFalse(self.store.maintenance)
+                else:
+                    with urllib.request.urlopen(request) as response:
+                        self.assertTrue(json.load(response)['maintenance'])
+            self.store.set_maintenance(False)
+            request = urllib.request.Request(url + '/' + self.doc['id'] + '/jobs',
+                data=json.dumps({'operation': 'translate', 'base_revision': self.doc['revision']}).encode(),
+                headers={'Authorization': 'Bearer secret', 'Content-Type': 'application/json'})
+            with self.assertRaises(urllib.error.HTTPError) as error: urllib.request.urlopen(request)
+            self.assertEqual(error.exception.code, 503)
+            self.assertIn('停止中または読み込み中', json.load(error.exception)['error'])
+            self.assertEqual(self.store.pending, 0)
         finally: server.shutdown(); thread.join(); server.server_close()
 
 

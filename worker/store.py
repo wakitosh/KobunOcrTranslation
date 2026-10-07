@@ -117,6 +117,7 @@ class Store:
         self.lock = threading.RLock()
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="kobun")
         self.pending = 0
+        self.maintenance = False
         self.runner = runner or self.run_engine
         # Interrupted work is visible and can be retried; never silently restarted.
         for file in self.root.glob("*/document.json"):
@@ -417,8 +418,19 @@ class Store:
             self.commit(doc, 'publication_' + state if state_changed else 'publication_metadata', actor)
             return doc
 
+    def set_maintenance(self, enabled):
+        if type(enabled) is not bool:
+            raise Problem('保守状態には真偽値を指定してください。')
+        with self.lock:
+            if enabled and self.pending:
+                raise Problem('処理中のジョブがあります。完了後に操作してください。', 409)
+            self.maintenance = enabled
+            return {'maintenance': self.maintenance}
+
     def submit(self, ident, body):
         with self.lock:
+            if self.maintenance:
+                raise Problem('実行サービスの切替中です。少し待ってから再実行してください。', 503)
             doc = self.get(ident)
             operation = body.get("operation")
             if operation not in ("layout", "recognize", "translate"):
