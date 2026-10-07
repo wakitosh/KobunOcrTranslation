@@ -1,4 +1,4 @@
-"""Manage local CPU servers; models and private data stay outside the module."""
+"""Manage local OCR and CPU/Metal LLM servers; models and private data stay outside the module."""
 import argparse
 import json
 import os
@@ -6,6 +6,7 @@ from pathlib import Path
 import signal
 import secrets
 import subprocess
+import sys
 import time
 from assets import catalog, model_entry, verify
 
@@ -36,9 +37,13 @@ def owned(name, entry):
     return entry['marker'] in result.stdout
 
 
-def initialize(runtime, model_id=None, ocr_only=False):
+def initialize(runtime, model_id=None, ocr_only=False, llm_backend=None):
     if model_id and ocr_only:
         raise ValueError('Choose --model or --ocr-only, not both.')
+    if llm_backend not in (None, 'cpu', 'metal') or (llm_backend == 'metal' and sys.platform != 'darwin'):
+        raise ValueError('Choose cpu, or metal on macOS.')
+    if ocr_only and llm_backend:
+        raise ValueError('An LLM backend requires a model.')
     runtime.mkdir(parents=True, exist_ok=True)
     (runtime/'.htaccess').write_text('Require all denied\n')
     token = runtime/'backend-token'
@@ -46,7 +51,7 @@ def initialize(runtime, model_id=None, ocr_only=False):
         token.write_text(secrets.token_urlsafe(40)); token.chmod(0o600)
     file = runtime/'config.json'
     config = json.loads(file.read_text()) if file.exists() else {}
-    if not model_id and not ocr_only and config:
+    if not model_id and not ocr_only and not llm_backend and config:
         return config
     if not model_id and not ocr_only:
         raise ValueError('Choose --model or --ocr-only explicitly. Run assets.py list first.')
@@ -58,7 +63,7 @@ def initialize(runtime, model_id=None, ocr_only=False):
     model = runtime/'models'/entry['filename'] if entry else None
     if entry and not verify(model, entry):
         raise ValueError(f'Model not verified: {model}. Fetch or place it first with assets.py.')
-    defaults = {'threads': 4, 'llm_url': 'http://127.0.0.1:8765', 'llama_revision': 'b10980',
+    defaults = {'threads': 4, 'llm_url': 'http://127.0.0.1:8765', 'llama_revision': 'b10980', 'llm_backend': 'cpu',
         'context_size': 4096, 'enable_thinking': False, 'max_output_tokens': 1024, 'job_timeout': 300,
         'image_hosts': ['dc.tulips.tsukuba.ac.jp']}
     config = {**defaults, **config, 'ndl_model_dir': str(runtime/'models/ndl'),
@@ -66,6 +71,7 @@ def initialize(runtime, model_id=None, ocr_only=False):
         'ndl_revision': 'ede4283845cdc0ba2bda8b7ebfc3dc80b33c92c8',
         'llm_model_id': model_id or '', 'llm_model_path': str(model) if model else '', 'llm_model': entry['name'] if entry else '',
         'llm_model_sha256': entry['sha256'] if entry else '', 'llm_token_file': str(token),
+        'llm_backend': llm_backend or config.get('llm_backend', 'cpu'),
         'prompt_revision': 'kobun-ja-translation-2', 'max_output_tokens': 1024,
         'sampling': {'temperature': 0}, 'no_repack': False, 'skip_chat_parsing': False,
         **(entry.get('translation_profile', {}) if entry else {})}
@@ -74,21 +80,44 @@ def initialize(runtime, model_id=None, ocr_only=False):
     return config
 
 
+def llama_command(runtime, config):
+    backend = config.get('llm_backend', 'cpu')
+    if backend not in ('cpu', 'metal') or (backend == 'metal' and sys.platform != 'darwin'):
+        raise ValueError('Choose cpu, or metal on macOS.')
+    command = [str(runtime/'llama/llama-b10980/llama-server'), '--model', config['llm_model_path'],
+        '--alias', config['llm_model'], '--host', '127.0.0.1', '--port', '8765',
+        '--api-key-file', str(runtime/'backend-token'), '--cors-origins', 'http://localhost', '--verbosity', '4',
+        '--fit', 'off', '--parallel', '1', '--ctx-size', str(config['context_size']),
+        '--threads', str(config['threads']), '--threads-batch', str(config['threads']), '--jinja']
+    if backend == 'cpu':
+        command += ['--device', 'none', '--n-gpu-layers', '0', '--no-kv-offload', '--no-op-offload']
+    else:
+        command += ['--device', 'MTL0', '--n-gpu-layers', '99']
+    if config.get('no_repack'):
+        command.append('--no-repack')
+    if config.get('skip_chat_parsing'):
+        if config.get('enable_thinking'):
+            raise ValueError('skip_chat_parsing requires a non-thinking model/profile')
+        command.append('--skip-chat-parsing')
+    return command
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=['init', 'start', 'stop', 'status'])
     parser.add_argument('--runtime', type=Path, default=Path(os.environ.get('KOBUN_RUNTIME', DEFAULT_RUNTIME)))
     parser.add_argument('--model', help='Model id; only for init. See assets.py list.')
+    parser.add_argument('--llm-backend', choices=['cpu', 'metal'], help='Only for init; default preserves the current backend (cpu on first setup).')
     parser.add_argument('--ocr-only', action='store_true', help='Initialize without a local LLM; only for init.')
     parser.add_argument('--service', choices=['all', 'llama', 'worker'], default='all',
         help='Start or stop one service. The default is both services.')
     args = parser.parse_args()
     runtime = args.runtime.resolve()
-    if (args.model or args.ocr_only) and args.action != 'init':
-        parser.error('--model/--ocr-only are only accepted with init; stop before switching')
+    if (args.model or args.ocr_only or args.llm_backend) and args.action != 'init':
+        parser.error('--model/--ocr-only/--llm-backend are only accepted with init; stop before switching')
     if args.action == 'init':
-        config = initialize(runtime, args.model, args.ocr_only)
-        print(f'Config: {runtime / "config.json"}\nModel: {config["llm_model"]}')
+        config = initialize(runtime, args.model, args.ocr_only, args.llm_backend)
+        print(f'Config: {runtime / "config.json"}\nModel: {config["llm_model"]}\nBackend: {config.get("llm_backend", "cpu")}')
         return
     pidfile = runtime/'processes.json'
     state = json.loads(pidfile.read_text()) if pidfile.exists() else {}
@@ -130,22 +159,10 @@ def main():
         for model in catalog()['ocr']:
             if not verify(Path(config['ndl_model_dir'])/model['filename'], model):
                 raise ValueError(f'OCR model missing or invalid: {model["filename"]}')
-    llama = runtime/'llama/llama-b10980/llama-server'
     commands = {
-        'llama': [str(llama), '--model', config['llm_model_path'], '--alias', config['llm_model'],
-            '--host', '127.0.0.1', '--port', '8765', '--device', 'none', '--n-gpu-layers', '0',
-            '--api-key-file', str(runtime/'backend-token'), '--cors-origins', 'http://localhost', '--verbosity', '4',
-            '--no-kv-offload', '--no-op-offload', '--fit', 'off', '--parallel', '1',
-            '--ctx-size', str(config['context_size']), '--threads', str(config['threads']),
-            '--threads-batch', str(config['threads']), '--jinja'],
+        'llama': llama_command(runtime, config),
         'worker': [str(runtime/'venv/bin/python'), str(Path(__file__).with_name('server.py')), '--runtime', str(runtime)],
     }
-    if config.get('no_repack'):
-        commands['llama'].append('--no-repack')
-    if config.get('skip_chat_parsing'):
-        if config.get('enable_thinking'):
-            raise ValueError('skip_chat_parsing requires a non-thinking model/profile')
-        commands['llama'].append('--skip-chat-parsing')
     for name, command in commands.items():
         if args.service not in ('all', name):
             continue

@@ -6,7 +6,7 @@ KOBUN_ROOT="$(cd "$KOBUN_MODULE/../.." && pwd)"
 KOBUN_RUNTIME="${KOBUN_RUNTIME:-$KOBUN_ROOT/var/kobun-ocr-translation}"
 if [ "$#" -ne 1 ]; then
     echo 'Usage: KOBUN_RUNTIME=/private/path bash worker/setup-macos.sh qwen35-9b-q4km'
-    echo 'Choose explicitly: qwen35-9b-q4km (6.17 GB) or qwen3-4b-q4km (2.50 GB). See worker/models.json for licenses.'
+    echo 'Choose explicitly: qwen35-9b-q4km (6.17 GB), qwen3-4b-q4km (2.50 GB), or qwen35-35b-a3b-q4km (22.29 GB). See worker/models.json for licenses.'
     exit 1
 fi
 KOBUN_MODEL_ID="$1"

@@ -6,11 +6,11 @@ umask 077
 KOBUN_MODULE="$(cd "$(dirname "$0")/.." && pwd)"
 KOBUN_RUNTIME="${KOBUN_RUNTIME:-/var/lib/kobun-ocr-translation}"
 if [ "$#" -ne 1 ]; then
-    echo 'Usage: KOBUN_RUNTIME=/private/path bash worker/setup-rhel9.sh qwen35-9b-q4km | qwen3-4b-q4km | none' >&2
+    echo 'Usage: KOBUN_RUNTIME=/private/path bash worker/setup-rhel9.sh <model-id> | none; see worker/models.json' >&2
     exit 1
 fi
 KOBUN_MODEL_ID="$1"
-case "$KOBUN_MODEL_ID" in qwen35-9b-q4km|qwen3-4b-q4km|none) ;; *) echo 'Unknown model selection.' >&2; exit 1 ;; esac
+case "$KOBUN_MODEL_ID" in qwen35-9b-q4km|qwen3-4b-q4km|qwen35-35b-a3b-q4km|none) ;; *) echo 'Unknown model selection.' >&2; exit 1 ;; esac
 KOBUN_BUILD_JOBS="${KOBUN_BUILD_JOBS:-2}"
 if ! [[ "$KOBUN_BUILD_JOBS" =~ ^[1-9][0-9]*$ ]]; then echo 'Invalid build jobs.' >&2; exit 1; fi
 if [ ! -f /etc/os-release ]; then

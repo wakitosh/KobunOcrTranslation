@@ -35,6 +35,12 @@ React / React DOM (MIT) and OpenSeadragon (BSD-3-Clause) are bundled by Vite. Th
 - The model is downloaded separately. `worker/models.json` pins its source, size, hash and license link. Weights are not modified by this module.
 - Only text inference is used. The UI labels all generated translations for human review.
 
+### Qwen3.5-35B-A3B
+
+- Original model: [Qwen3.5-35B-A3B](https://huggingface.co/Qwen/Qwen3.5-35B-A3B), Apache 2.0.
+- GGUF conversion: [bartowski/Qwen_Qwen3.5-35B-A3B-GGUF](https://huggingface.co/bartowski/Qwen_Qwen3.5-35B-A3B-GGUF), revision `3d2a22d4eb631b9c8fd2be94599dc2fd84b4a595`, Q4_K_M.
+- Model weights are downloaded separately into the private runtime, with the fixed size and SHA-256 recorded in `worker/models.json`. Weights are not modified by this module; only text inference is used.
+
 ## License scope of this distribution
 
 The original code of Kobun OCR / Translation is distributed under GPL-3.0-or-later. That license does not replace the licenses on the third-party material listed above. The adapted honkoku-ocr-web material and the bundled NDL runtime subset remain subject to CC BY 4.0, with attribution and change notices preserved here and in the corresponding source files.

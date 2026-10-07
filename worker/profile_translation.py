@@ -54,7 +54,7 @@ def main():
     args.output.mkdir(parents=True, exist_ok=False)
     (args.output/'.htaccess').write_text('Require all denied\n')
     result = {'label': args.label, 'started_at': datetime.now(timezone.utc).isoformat(), 'host': host_info(), 'model': {key: config.get(key) for key in
-        ['llm_model', 'llm_model_sha256', 'llama_revision', 'threads', 'context_size', 'prompt_revision']},
+        ['llm_model', 'llm_model_sha256', 'llama_revision', 'llm_backend', 'threads', 'context_size', 'prompt_revision', 'no_repack', 'sampling', 'enable_thinking']},
         'notes': ['Model already loaded; cache state appears in each response.',
             'Measurements apply to this host and PID, not to another server.',
             'Do not run alongside other inference requests; process CPU/RSS includes all its requests.'], 'trials': []}

@@ -22,7 +22,7 @@ from urllib.request import Request, urlopen
 
 UNIT = 'kobun-ocr-control.service'
 MARKER = '# Managed by KobunOcrTranslation install_rhel9.py'
-MODELS = ['qwen35-9b-q4km', 'qwen3-4b-q4km', 'none']
+MODELS = ['qwen35-9b-q4km', 'qwen3-4b-q4km', 'none', 'qwen35-35b-a3b-q4km']
 
 
 def absolute_path(value):
@@ -59,7 +59,7 @@ def arguments(argv=None):
     parser.add_argument('--configure-selinux', action='store_true', help='Explicitly label PHP files and enable httpd_can_network_connect')
     parser.add_argument('--apply', action='store_true', help='Perform installation; default only prints plan')
     args = parser.parse_args(argv)
-    args.memory_max = args.memory_max or {'none': '4G', MODELS[1]: '8G', MODELS[0]: '16G'}[args.model]
+    args.memory_max = args.memory_max or {'none': '4G', MODELS[1]: '8G', MODELS[0]: '16G', 'qwen35-35b-a3b-q4km': '48G'}[args.model]
     if not 1 <= args.threads <= 64 or not 1 <= args.cpu_quota <= 6400 or not re.fullmatch(r'[1-9][0-9]*[MG]', args.memory_max):
         parser.error('Invalid CPU/thread/memory limit.')
     if args.service_user in ('root', args.php_user):
@@ -221,7 +221,7 @@ def preflight(args):
     disk_parent = args.prefix
     while not disk_parent.exists():
         disk_parent = disk_parent.parent
-    minimum = {'none': 3, MODELS[1]: 10, MODELS[0]: 20}[args.model] * 1024**3
+    minimum = {'none': 3, MODELS[1]: 10, MODELS[0]: 20, 'qwen35-35b-a3b-q4km': 40}[args.model] * 1024**3
     if not (runtime/'config.json').exists() and shutil.disk_usage(disk_parent).free < minimum:
         raise ValueError('Insufficient free disk for initial setup (models, build and virtual environment).')
 

@@ -64,6 +64,8 @@ RHEL 9.7では[INSTALL_RHEL9.md](INSTALL_RHEL9.md)のGitHub取得＋一括イン
 
 モデル設定の保存だけでは数GBのファイルをダウンロードしません。設定画面に表示されるコマンドをサーバ管理者が実行し、サイズとSHA-256を検証した後でworkerとLLMサーバを起動します。候補と固定リビジョンは `worker/models.json` に記録しています。
 
+ローカルLLMの候補はQwen3-4B、Qwen3.5-9B、Qwen3.5-35B-A3B（いずれもQ4_K_M）です。35B-A3Bのモデルファイルは22.29GBで、十分なメモリが必要です。CPU実行に加え、macOSではMetalによるGPU実行を明示選択できます。切替手順は[LOCAL_MACOS.md](LOCAL_MACOS.md)、配布・容量の詳細は[DISTRIBUTION.md](DISTRIBUTION.md)を参照してください。
+
 モジュール設定の「実行サービス」にはworkerとLLMサーバの稼働・準備状態、workerの処理中件数を表示します。全体管理者だけが起動・停止・再起動できます。設定の保存は不要です。処理中ジョブがある間は停止・再起動を拒否します。workerに独立した自動起動サービスはありません。運用サービス自体が停止した場合は、RHEL 9.7では`sudo systemctl start kobun-ocr-control.service`で起動します。macOSのローカル環境では[LOCAL_MACOS.md](LOCAL_MACOS.md)を参照してください。
 
 ## 公開閲覧支援の設定

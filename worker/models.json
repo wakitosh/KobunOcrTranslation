@@ -25,6 +25,19 @@
       "license": "Apache-2.0",
       "license_url": "https://huggingface.co/Qwen/Qwen3.5-9B/blob/main/LICENSE",
       "url": "https://huggingface.co/bartowski/Qwen_Qwen3.5-9B-GGUF/resolve/182be2fd6c7bc44887d88a91cb03ff009cc9f549/Qwen_Qwen3.5-9B-Q4_K_M.gguf"
+    },
+    {
+      "id": "qwen35-35b-a3b-q4km",
+      "name": "Qwen3.5-35B-A3B",
+      "filename": "Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf",
+      "repository": "bartowski/Qwen_Qwen3.5-35B-A3B-GGUF",
+      "revision": "3d2a22d4eb631b9c8fd2be94599dc2fd84b4a595",
+      "source_filename": "Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf",
+      "sha256": "2f2df1e8b2e92b642c1850ea1734b341cc8ca5098c42cc0a8b8c436a8d4751ab",
+      "size_bytes": 22285080384,
+      "license": "Apache-2.0",
+      "license_url": "https://huggingface.co/Qwen/Qwen3.5-35B-A3B/blob/main/LICENSE",
+      "url": "https://huggingface.co/bartowski/Qwen_Qwen3.5-35B-A3B-GGUF/resolve/3d2a22d4eb631b9c8fd2be94599dc2fd84b4a595/Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf"
     }
   ],
   "ocr": [

@@ -1,6 +1,6 @@
 # RHEL 9.7への一括導入
 
-RHEL 9.7上でOCRとローカルLLMをCPU実行するための手順です。標準モデルはQwen3.5-9Bで、4BまたはOCRのみの構成も選択できます。サーバ管理者が設置環境の運用規程に従って実施してください。インストーラは**`--apply`がなければ計画表示だけ**です。モデル、実行環境、秘密ファイルはGitリポジトリに含めません。
+RHEL 9.7上でOCRとローカルLLMをCPU実行するための手順です。標準モデルはQwen3.5-9Bで、4B、35B-A3BまたはOCRのみの構成も選択できます。サーバ管理者が設置環境の運用規程に従って実施してください。インストーラは**`--apply`がなければ計画表示だけ**です。モデル、実行環境、秘密ファイルはGitリポジトリに含めません。
 
 ## 導入前に確認する項目
 
@@ -45,7 +45,7 @@ sudo python3 /opt/omeka-s/modules/KobunOcrTranslation/worker/install_rhel9.py \
 2. 必要RPMを導入し、専用のnologinユーザ`kobunocr`を作成。適合する既存ユーザは再利用
 3. workerコードをroot所有の別領域へコピー。専用ユーザへOmekaの管理権限を追加せず、Omekaの権限を変更しない
 4. 専用ユーザによる一時systemdサービスでPython仮想環境を構築し、固定版llama.cppを2並列でビルド。CPU・メモリ制限は構築時にも適用
-5. 固定版のOCR・9Bモデルを取得し、容量・SHA-256を検証。既存データとトークンを保持し、既存設定はバックアップ
+5. 固定版のOCR・選択したLLMモデルを取得し、容量・SHA-256を検証。既存データとトークンを保持し、既存設定はバックアップ
 6. PHPユーザだけにACLで秘密ファイルの読取権限を付与し、常駐する運用サービスを登録・起動
 7. 認証付き状態取得を確認。OCR・LLMはまだ起動しない
 
@@ -64,6 +64,8 @@ sudo python3 /opt/omeka-s/modules/KobunOcrTranslation/worker/install_rhel9.py \
 9B構成の初期上限は`CPUQuota=200%`（1CPUを100%として2CPU相当）、`MemoryMax=16G`、swap使用なし、OCR/LLMのスレッド数2です。上限は運用サービスと、その配下のworker・LLMの合計に適用します。16Gは**負荷を抑えるための上限で、実測済みの必要メモリではありません**。上限に達すると当該処理が終了する場合があります。CPU上限を抑える分、訳の生成時間は長くなる可能性があります。[RHEL向けsystemdの資源制限](https://redhat-plumbers.github.io/systemd-rhel9/systemd.resource-control.html)
 
 変更する場合は初回実行時に`--threads 4 --cpu-quota 400 --memory-max 20G`等を指定できます。4Bは`--model qwen3-4b-q4km`、OCRのみは`--model none`です。OCRのみ構成ではllama.cpp・LLMモデルを取得しません。
+
+35B-A3Bは`--model qwen35-35b-a3b-q4km`を指定します。モデルだけで22.29GBあり、初回は40GiB以上の空き容量を確認します。この構成の初期メモリ上限は48Gで、CPU上限・スレッド数は9Bと同じです。共有サーバでこのメモリ上限を許容できるか確認し、実行前に設置先の負荷と必要メモリを検証してください。
 
 実行領域の親は`--prefix /opt/kobun-backend`で変更できます（パスは英数字等で指定）。その場合は、生成された`php/backend.json`に従ってOmekaの`config/local.config.php`へ`kobun_ocr`を設定してください。標準配置ではモジュールが接続設定を自動読込するため、その編集は不要です。既存の`local.config.php`に`kobun_ocr`がある場合はそちらが優先されます。トークンの値は設定ファイルへ直接記載せず、秘密ファイルのパスを指定してください。
 

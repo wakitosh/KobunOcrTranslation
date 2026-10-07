@@ -9,7 +9,7 @@ import unittest
 from unittest.mock import patch
 
 import install_rhel9 as installer
-from manage import initialize
+from manage import initialize, llama_command
 
 
 class InstallTest(unittest.TestCase):
@@ -43,6 +43,45 @@ class InstallTest(unittest.TestCase):
         self.assertEqual(command[-1], 'qwen35-9b-q4km')
         self.assertEqual(installer.backend_config(args)['token_file'], '/opt/kobun-ocr-translation/php/backend-token')
         self.assertEqual(self.args('--model', 'none').memory_max, '4G')
+
+    def test_moe_model_uses_its_own_resource_cap_and_setup_selection(self):
+        args = self.args('--model', 'qwen35-35b-a3b-q4km')
+        self.assertEqual(args.memory_max, '48G')
+        self.assertIn('MemoryMax=48G', installer.unit_text(args, 'kobunocr'))
+        self.assertEqual(installer.setup_command(args)[-1], 'qwen35-35b-a3b-q4km')
+
+    def test_cpu_default_and_explicit_metal_commands_preserve_auth_and_context(self):
+        config = {'llm_model_path': '/private/models/model.gguf', 'llm_model': 'fixture', 'context_size': 4096, 'threads': 4}
+        cpu = llama_command(Path('/private/runtime'), config)
+        self.assertEqual(cpu[cpu.index('--device')+1], 'none')
+        self.assertEqual(cpu[cpu.index('--n-gpu-layers')+1], '0')
+        self.assertIn('--no-kv-offload', cpu)
+        self.assertIn('--no-op-offload', cpu)
+        with patch('manage.sys.platform', 'darwin'):
+            metal = llama_command(Path('/private/runtime'), {**config, 'llm_backend': 'metal'})
+        self.assertEqual(metal[metal.index('--device')+1], 'MTL0')
+        self.assertEqual(metal[metal.index('--n-gpu-layers')+1], '99')
+        self.assertNotIn('--no-kv-offload', metal)
+        self.assertNotIn('--no-op-offload', metal)
+        for command in (cpu, metal):
+            self.assertEqual(command[command.index('--api-key-file')+1], '/private/runtime/backend-token')
+            self.assertEqual(command[command.index('--ctx-size')+1], '4096')
+        with patch('manage.sys.platform', 'linux'), self.assertRaisesRegex(ValueError, 'macOS'):
+            llama_command(Path('/private/runtime'), {**config, 'llm_backend': 'metal'})
+        with self.assertRaisesRegex(ValueError, 'Choose cpu'):
+            llama_command(Path('/private/runtime'), {**config, 'llm_backend': 'unknown'})
+
+    def test_model_switch_preserves_or_explicitly_changes_the_backend(self):
+        with tempfile.TemporaryDirectory() as temp:
+            runtime = Path(temp)
+            with patch('manage.sys.platform', 'darwin'), patch('manage.verify', return_value=True):
+                first = initialize(runtime, 'qwen35-9b-q4km', llm_backend='metal')
+                self.assertEqual(first['llm_backend'], 'metal')
+                switched = initialize(runtime, 'qwen35-35b-a3b-q4km')
+                self.assertEqual(switched['llm_backend'], 'metal')
+                self.assertEqual(switched['llm_model'], 'Qwen3.5-35B-A3B')
+                cpu = initialize(runtime, 'qwen35-35b-a3b-q4km', llm_backend='cpu')
+                self.assertEqual(cpu['llm_backend'], 'cpu')
 
     def test_invalid_paths_accounts_and_resource_limits_rejected(self):
         for extra in [('--prefix', '/opt/omeka-s/data'), ('--prefix', '/opt'),

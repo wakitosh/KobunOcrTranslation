@@ -15,6 +15,20 @@ python3 modules/KobunOcrTranslation/worker/install_control_macos.py \
 
 `install_control_macos.py`が`~/Library/LaunchAgents/local.omeka-s.kobun-ocr-translation-control.plist`を作成し、運用サービスをすぐ起動します。以後はログイン時に起動し、異常終了時はlaunchdが再起動します。設定画面の「実行サービス」でworkerと、必要ならLLMサーバの「起動」を押してください。
 
+## モデル切替とMetal実行
+
+モジュール設定画面でworkerとLLMサーバを停止し、モデルを取得・検証してから切り替えます。次は35B-A3BのQ4_K_M版をApple SiliconのGPUで実行する例です。モデルだけで22.29GBあり、十分な空き容量・メモリが必要です。
+
+```sh
+python3 modules/KobunOcrTranslation/worker/assets.py fetch \
+  --runtime "$PWD/var/kobun-ocr-translation" --model qwen35-35b-a3b-q4km
+python3 modules/KobunOcrTranslation/worker/manage.py init \
+  --runtime "$PWD/var/kobun-ocr-translation" --model qwen35-35b-a3b-q4km \
+  --llm-backend metal
+```
+
+その後、設定画面からLLMサーバとworkerを起動します。`--llm-backend cpu`でCPU実行へ戻せます。指定しない場合は既存の実行方式を維持し、初回はCPU実行です。MetalはmacOS専用です。RHELではCPU実行を使用します。
+
 ## 運用サービス自体の起動・状態確認
 
 ```sh

@@ -100,7 +100,7 @@ class Module extends AbstractModule
             $html .= '<option value="' . $renderer->escapeHtmlAttr($id) . '"' . ($id === $selectedModel ? ' selected' : '') . '>'
                 . $renderer->escapeHtml((string) ($model['name'] ?? $id) . sprintf('（%.2f GB、%s）', $size, (string) ($model['license'] ?? ''))) . '</option>';
         }
-        $html .= '</select><p class="explanation">4Bは必要容量と処理時間を抑えたい環境向け、9Bは訳質を優先する環境向けです。実メモリ使用量は重みファイルの容量より大きくなります。</p></div></div>'
+        $html .= '</select><p class="explanation">35B-A3Bは推論時に一部のパラメータを使うMoEモデルですが、重み全体を保持するメモリが必要です。容量だけでは訳質や速度を判断できないため、設置先で比較してください。</p></div></div>'
             . '<p>取得: <code>python3 modules/KobunOcrTranslation/worker/assets.py fetch --runtime /path/to/private/runtime --ocr --model '
             . $renderer->escapeHtml($selectedModel) . '</code></p>'
             . '<p>切替: 設定画面でworkerとLLMサーバを停止してから <code>python3 modules/KobunOcrTranslation/worker/manage.py init --runtime /path/to/private/runtime --model '
