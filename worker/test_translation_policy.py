@@ -5,11 +5,41 @@ from pathlib import Path
 import unittest
 from urllib.error import HTTPError, URLError
 from unittest.mock import patch
-from translation_policy import parse_translation, sampling_settings, check_text, REVISION, TEXT_REVISION, TEXT_PROMPT
+from translation_policy import parse_translation, sampling_settings, check_text, REVISION, TEXT_REVISION, TEXT_PROMPT, MODERN_REVISION, MODERN_PROMPT, worker_config
 from engine import translate, local_json
 
 
 class TranslationPolicyTest(unittest.TestCase):
+    def test_worker_upgrade_preserves_runtime_options_and_legacy_experiments(self):
+        original = {'prompt_revision': 'kobun-ja-translation-2', 'llm_backend': 'metal',
+            'sampling': {'temperature': 0}, 'context_size': 4096, 'llm_model': 'installed-model'}
+        upgraded = worker_config(original)
+        self.assertEqual(upgraded, {**original, 'prompt_revision': MODERN_REVISION})
+        self.assertEqual(original['prompt_revision'], 'kobun-ja-translation-2')
+        self.assertEqual(worker_config({})['prompt_revision'], MODERN_REVISION)
+        for revision in ['kobun-ja-translation-1', 'kobun-ja-translation-3', REVISION, TEXT_REVISION, MODERN_REVISION]:
+            with self.subTest(revision=revision):
+                self.assertEqual(worker_config({'prompt_revision': revision})['prompt_revision'], revision)
+
+    def test_new_default_preserves_input_and_records_the_actual_prompt_revision(self):
+        raw = '人の物言ふさま聞きにくからず、あかず会はまほし。'
+        translated = 'その人の話し方は聞き苦しくなく、飽きずに会っていたい。'
+        response = {'choices': [{'finish_reason': 'stop', 'message': {'content': translated}}]}
+        with tempfile.TemporaryDirectory() as tmp, patch('engine.local_json', side_effect=[{'prompt': MODERN_PROMPT+raw}, {'tokens': [1]}, response]) as call:
+            result = translate({'lines': [{'id': 'a', 'raw': raw}], 'run_dir': tmp},
+                {'llm_url': 'http://local', 'llm_model': 'test'})
+            request = json.loads((Path(tmp)/'llm-request.json').read_text())
+            self.assertEqual(request['messages'], [{'role': 'system', 'content': MODERN_PROMPT}, {'role': 'user', 'content': raw}])
+            self.assertEqual(request['temperature'], 0)
+            self.assertFalse(request['chat_template_kwargs']['enable_thinking'])
+            self.assertNotIn('response_format', request)
+            self.assertEqual(result['translation']['input'], raw)
+            self.assertEqual(result['translation']['source_transcription'], raw)
+            self.assertEqual(result['translation']['text'], translated)
+            self.assertEqual(result['translation']['prompt_revision'], MODERN_REVISION)
+            self.assertEqual(result['metrics']['prompt_revision'], MODERN_REVISION)
+            self.assertTrue(result['metrics']['prompt_contains_instructions'])
+
     def test_local_connection_failure_is_actionable_without_retry(self):
         for error in [URLError(ConnectionRefusedError(61, 'Connection refused')), TimeoutError('timed out')]:
             with self.subTest(error=type(error).__name__), patch('engine.urllib.request.urlopen', side_effect=error) as call:

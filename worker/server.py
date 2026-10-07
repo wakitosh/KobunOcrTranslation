@@ -16,6 +16,7 @@ from urllib.parse import urlsplit
 import urllib.request
 
 from store import Store, Problem
+from translation_policy import worker_config
 
 
 def check_image_url(url, hosts):
@@ -95,7 +96,8 @@ def make_handler(store, token, config):
                     ocr = ocr and importlib.util.find_spec("onnxruntime") is not None
                     self.respond(200, {"ocr_ready": ocr, "llm_ready": ready, "pending": store.pending, "max_pending": 4,
                         "worker_concurrency": 1, "ndl_revision": config["ndl_revision"], "llm_model": config["llm_model"],
-                        "llm_model_id": config.get("llm_model_id", ""), 'maintenance': store.maintenance})
+                        "llm_model_id": config.get("llm_model_id", ""), 'maintenance': store.maintenance,
+                        'prompt_revision': config.get('prompt_revision')})
                     return
                 if parts == ['maintenance'] and self.command == 'POST':
                     self.respond(200, store.set_maintenance(self.body().get('enabled')))
@@ -206,7 +208,7 @@ def main():
     # A second process must not mark another worker's jobs as interrupted.
     lease = (runtime/"worker.lock").open("a")
     fcntl.flock(lease, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    config = json.loads((runtime/"config.json").read_text())
+    config = worker_config(json.loads((runtime/"config.json").read_text()))
     token_file = runtime/"backend-token"
     if not token_file.exists():
         token_file.write_text(secrets.token_urlsafe(40))

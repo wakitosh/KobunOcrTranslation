@@ -27,7 +27,7 @@ LEGACY_SYSTEM_PROMPT = """あなたは古典日本語の現代語訳を行いま
 文脈不足で判断できない箇所は「［解釈未確定］」とし、推測で埋めないでください。
 要約せず、現代語訳だけを出力してください。"""
 
-PROMPT_REVISION = 'kobun-ja-translation-2'
+PROMPT_REVISION = policy.MODERN_REVISION
 V2_SYSTEM_PROMPT = """あなたは日本語の古典文学を、現代の読者が理解できる日本語に訳す翻訳者です。
 入力の古文について、古語の意味と助動詞・助詞・敬語の働きを解釈し、各文の内容を現代日本語の文で表してください。
 文字を読み替えるだけでなく、古語や古典文法を現代語の語彙・文法に置き換えてください。
@@ -101,9 +101,9 @@ def translate(payload, config):
     original = "\n".join(line.get("raw", "") for line in lines if line["id"] in selected)
     source = payload.get('input_text', original.replace('\n', ''))
     revision = config.get('prompt_revision', PROMPT_REVISION)
-    if revision not in ['kobun-ja-translation-1', 'kobun-ja-translation-2', 'kobun-ja-translation-3', policy.REVISION, policy.TEXT_REVISION]:
+    if revision not in ['kobun-ja-translation-1', 'kobun-ja-translation-2', 'kobun-ja-translation-3', policy.REVISION, policy.TEXT_REVISION, policy.MODERN_REVISION]:
         raise ValueError('不明なプロンプト版です。')
-    system = {'kobun-ja-translation-1': LEGACY_SYSTEM_PROMPT, 'kobun-ja-translation-2': V2_SYSTEM_PROMPT, 'kobun-ja-translation-3': V3_SYSTEM_PROMPT, policy.REVISION: policy.SYSTEM_PROMPT, policy.TEXT_REVISION: policy.TEXT_PROMPT}[revision]
+    system = {'kobun-ja-translation-1': LEGACY_SYSTEM_PROMPT, 'kobun-ja-translation-2': V2_SYSTEM_PROMPT, 'kobun-ja-translation-3': V3_SYSTEM_PROMPT, policy.REVISION: policy.SYSTEM_PROMPT, policy.TEXT_REVISION: policy.TEXT_PROMPT, policy.MODERN_REVISION: policy.MODERN_PROMPT}[revision]
     # Some model templates replace or ignore system messages. V5 puts the task in the user instruction.
     messages = ([{'role': 'user', 'content': system+'\n\n【古文】\n'+source+'\n\n【現代語訳】'}]
         if revision == policy.TEXT_REVISION else [{"role": "system", "content": system}, {"role": "user", "content": source}])

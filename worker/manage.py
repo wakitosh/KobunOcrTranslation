@@ -10,6 +10,7 @@ import sys
 import tempfile
 import time
 from assets import catalog, model_entry, verify
+from translation_policy import MODERN_REVISION
 
 # Development default shared with the Omeka module configuration. Production
 # installations should set KOBUN_RUNTIME to a private application-data path
@@ -86,7 +87,7 @@ def initialize(runtime, model_id=None, ocr_only=False, llm_backend=None):
         'llm_model_id': model_id or '', 'llm_model_path': str(model) if model else '', 'llm_model': entry['name'] if entry else '',
         'llm_model_sha256': entry['sha256'] if entry else '', 'llm_token_file': str(token),
         'llm_backend': llm_backend or config.get('llm_backend', 'cpu'),
-        'prompt_revision': 'kobun-ja-translation-2', 'max_output_tokens': 1024,
+        'prompt_revision': MODERN_REVISION, 'max_output_tokens': 1024,
         'sampling': {'temperature': 0}, 'no_repack': False, 'skip_chat_parsing': False,
         **(entry.get('translation_profile', {}) if entry else {})}
     config.pop('ndl_root', None)
