@@ -6,22 +6,69 @@
   background: #f8fbf9;
   color: #18251e;
 }
-.kobun-reading [hidden] { display: none !important; }
-.kobun-reading__cache { margin: 1rem; padding: .75rem; border: 1px solid #c8d4cd; border-radius: .25rem; }
-.kobun-reading__cache summary { cursor: pointer; }
-.kobun-reading__cache p { font-size: .8rem; line-height: 1.6; }
-.kobun-reading__cache-row { display: flex; align-items: baseline; flex-wrap: wrap; gap: .5rem 1rem; }
-.kobun-reading__cache-row > div { display: flex; flex-wrap: wrap; gap: .5rem; }
-.kobun-reading .kobun-reading__cache [data-cache-action="delete"] { background: #fff; color: #8d302d; border: 1px solid #8d302d; }
-.kobun-reading__cache-message:empty { display: none; }
-.kobun-reading__retention { margin: .75rem 1rem; color: #52645a; font-size: .8rem; line-height: 1.6; }
+
+.kobun-reading [hidden] {
+  display: none !important;
+}
+
+.kobun-reading__cache {
+  margin: 1rem;
+  padding: .75rem;
+  border: 1px solid #c8d4cd;
+  border-radius: .25rem;
+}
+
+.kobun-reading__cache summary {
+  cursor: pointer;
+}
+
+.kobun-reading__cache p {
+  font-size: .8rem;
+  line-height: 1.6;
+}
+
+.kobun-reading__cache-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: .5rem 1rem;
+}
+
+.kobun-reading__cache-row>div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+}
+
+.kobun-reading .kobun-reading__cache [data-cache-action="delete"] {
+  background: #fff;
+  color: #8d302d;
+  border: 1px solid #8d302d;
+}
+
+.kobun-reading__cache-message:empty {
+  display: none;
+}
+
+.kobun-reading__retention {
+  margin: .75rem 1rem;
+  color: #52645a;
+  font-size: .8rem;
+  line-height: 1.6;
+}
+
 .kobun-reading__modal-heading {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
 }
-.kobun-reading__modal-heading h2 { margin: .15rem 0; font-size: 1.45rem; }
+
+.kobun-reading__modal-heading h2 {
+  margin: .15rem 0;
+  font-size: 1.45rem;
+}
+
 .kobun-reading__eyebrow {
   margin: 0;
   color: #476457;
@@ -29,6 +76,7 @@
   font-weight: 700;
   letter-spacing: .12em;
 }
+
 .kobun-reading__state {
   display: inline-block;
   flex: 0 1 auto;
@@ -45,8 +93,17 @@
   font-weight: 700;
   line-height: 1.15;
 }
-.kobun-reading__state.is-published { background: #dcefe1; color: #174b28; }
-.kobun-reading__state.is-machine { background: #fff0c7; color: #684a00; }
+
+.kobun-reading__state.is-published {
+  background: #dcefe1;
+  color: #174b28;
+}
+
+.kobun-reading__state.is-machine {
+  background: #fff0c7;
+  color: #684a00;
+}
+
 .kobun-reading__controls {
   display: flex;
   align-items: flex-start;
@@ -54,8 +111,9 @@
   gap: 1rem;
   flex-wrap: nowrap;
 }
+
 .kobun-reading button {
-  min-height: 2rem;
+  min-height: 1rem;
   padding: .55rem .9rem;
   margin-bottom: .375rem;
   border: 0;
@@ -67,16 +125,34 @@
   font-weight: 400;
   cursor: pointer;
 }
-.kobun-reading button:disabled { opacity: .55; cursor: wait; }
-.kobun-reading__start { flex: 0 0 auto; white-space: nowrap; }
-.kobun-reading__message { margin-top: .75rem; font-weight: 400; font-size: .875rem; }
-.kobun-reading__message:empty { display: none; }
+
+.kobun-reading button:disabled {
+  opacity: .55;
+  cursor: wait;
+}
+
+.kobun-reading__start {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.kobun-reading__message {
+  margin-top: .75rem;
+  font-weight: 400;
+  font-size: .875rem;
+}
+
+.kobun-reading__message:empty {
+  display: none;
+}
+
 .kobun-reading__credit {
   margin: .6rem 0 0;
   text-align: right;
   color: #617067;
   font-size: .8rem;
 }
+
 .kobun-reading__dialog {
   --kobun-reading-safe-top: env(safe-area-inset-top, 0px);
   --kobun-reading-safe-right: env(safe-area-inset-right, 0px);
@@ -107,7 +183,12 @@
   overflow-wrap: anywhere;
   container: kobun-reading / inline-size;
 }
-.kobun-reading__dialog[open] { display: flex; flex-direction: column; }
+
+.kobun-reading__dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+
 .kobun-reading__window-body {
   flex: 1 1 auto;
   min-height: 0;
@@ -116,6 +197,7 @@
   overscroll-behavior: contain;
   background: #fff;
 }
+
 .kobun-reading__resize-controls {
   position: absolute;
   inset: auto 0 0;
@@ -124,6 +206,7 @@
   height: 1.5rem;
   pointer-events: none;
 }
+
 .kobun-reading .kobun-reading__resize-handle {
   display: grid;
   place-items: end;
@@ -140,21 +223,35 @@
   touch-action: none;
   pointer-events: auto;
 }
+
 .kobun-reading__resize-handle span {
   width: 9px;
   height: 9px;
   background: repeating-linear-gradient(135deg, transparent 0 3px, currentColor 3px 4px);
   clip-path: polygon(100% 0, 100% 100%, 0 100%);
 }
+
 .kobun-reading .kobun-reading__resize-handle[data-resize-corner="left"] {
   justify-items: start;
   padding: 0 0 3px 3px;
   cursor: nesw-resize;
 }
-.kobun-reading__resize-handle[data-resize-corner="left"] span { transform: scaleX(-1); }
+
+.kobun-reading__resize-handle[data-resize-corner="left"] span {
+  transform: scaleX(-1);
+}
+
 .kobun-reading .kobun-reading__resize-handle:hover,
-.kobun-reading .kobun-reading__resize-handle:focus-visible { background: transparent; color: #526058; }
-.kobun-reading .kobun-reading__resize-handle:focus-visible { outline: 1px solid #929a95; outline-offset: -3px; }
+.kobun-reading .kobun-reading__resize-handle:focus-visible {
+  background: transparent;
+  color: #526058;
+}
+
+.kobun-reading .kobun-reading__resize-handle:focus-visible {
+  outline: 1px solid #929a95;
+  outline-offset: -3px;
+}
+
 .kobun-reading__modal-heading {
   flex: 0 0 auto;
   position: sticky;
@@ -166,7 +263,11 @@
   touch-action: none;
   user-select: none;
 }
-.kobun-reading__modal-heading.is-dragging { cursor: grabbing; }
+
+.kobun-reading__modal-heading.is-dragging {
+  cursor: grabbing;
+}
+
 .kobun-reading .kobun-reading__close {
   min-width: 2.75rem;
   padding: .2rem;
@@ -175,12 +276,14 @@
   font-size: 1.8rem;
   line-height: 1;
 }
+
 .kobun-reading__quality {
   margin: .75rem 1.5rem 0;
   padding: .75rem;
   border-left: 4px solid #b38824;
   background: #fff8e7;
 }
+
 .kobun-reading__responsibility {
   margin: .65rem 1.5rem;
   color: #35483e;
@@ -188,18 +291,43 @@
   font-weight: 400;
   overflow-wrap: anywhere;
 }
+
 .kobun-reading__attribution {
-  margin:.75rem 1.5rem 0;
-  padding:1rem;
-  border:1px solid #c8d4cd;
-  background:#f8fbf9;
+  margin: .75rem 1.5rem 0;
+  padding: 1rem;
+  border: 1px solid #c8d4cd;
+  background: #f8fbf9;
 }
-.kobun-reading__attribution h3 { margin:0 0 .75rem; font-size:1rem; }
-.kobun-reading__attribution dl { display:grid; grid-template-columns:max-content minmax(0,1fr); gap:.35rem 1rem; margin:0; }
-.kobun-reading__attribution dt { color:#52645a; font-size:.8rem; font-weight:700; }
-.kobun-reading__attribution dd { margin:0; white-space:pre-line; overflow-wrap:anywhere; }
+
+.kobun-reading__attribution h3 {
+  margin: 0 0 .75rem;
+  font-size: 1rem;
+}
+
+.kobun-reading__attribution dl {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: .35rem 1rem;
+  margin: 0;
+}
+
+.kobun-reading__attribution dt {
+  color: #52645a;
+  font-size: .8rem;
+  font-weight: 700;
+}
+
+.kobun-reading__attribution dd {
+  margin: 0;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
 .kobun-reading[data-active-tab="translation"] .kobun-reading__attribution,
-.kobun-reading[data-active-tab="translation"] .kobun-reading__responsibility { display: none; }
+.kobun-reading[data-active-tab="translation"] .kobun-reading__responsibility {
+  display: none;
+}
+
 .kobun-reading__progress {
   display: flex;
   align-items: center;
@@ -210,6 +338,7 @@
   background: #eef5f0;
   color: #254535;
 }
+
 .kobun-reading__progress span {
   width: 1rem;
   height: 1rem;
@@ -219,14 +348,24 @@
   border-radius: 50%;
   animation: kobun-reading-spin .8s linear infinite;
 }
-.kobun-reading__progress b { min-width: 0; }
-@keyframes kobun-reading-spin { to { transform: rotate(360deg); } }
+
+.kobun-reading__progress b {
+  min-width: 0;
+}
+
+@keyframes kobun-reading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .kobun-reading__tabs {
   display: flex;
   gap: .25rem;
   margin: 1.25rem 1.5rem 0;
   border-bottom: 1px solid #c8d4cd;
 }
+
 .kobun-reading .kobun-reading__tab {
   margin-bottom: -1px;
   border: 1px solid transparent;
@@ -235,12 +374,14 @@
   background: #e8eeea;
   color: #253b30;
 }
+
 .kobun-reading .kobun-reading__tab.is-active {
   border-color: #c8d4cd;
   border-bottom-color: #fff;
   background: #fff;
   color: #174b28;
 }
+
 .kobun-reading__tabpanel {
   font-size: 1rem;
   min-height: 12rem;
@@ -248,8 +389,16 @@
   overflow: auto;
   background: #fff;
 }
-.kobun-reading__tabpanel[hidden] { display: none; }
-.kobun-reading__transcription p { margin: .25em 0; line-height: 1.9; }
+
+.kobun-reading__tabpanel[hidden] {
+  display: none;
+}
+
+.kobun-reading__transcription p {
+  margin: .25em 0;
+  line-height: 1.9;
+}
+
 .kobun-reading__transcription.is-vertical {
   display: flex;
   flex-direction: row;
@@ -259,49 +408,110 @@
   overflow: auto;
   overscroll-behavior-x: contain;
 }
-.kobun-reading__transcription.is-vertical.reading-rtl { flex-direction: row-reverse; }
+
+.kobun-reading__transcription.is-vertical.reading-rtl {
+  flex-direction: row-reverse;
+}
+
 .kobun-reading__transcription p.is-vertical {
   writing-mode: vertical-rl;
   text-orientation: mixed;
   max-height: var(--kobun-reading-column-height, 24rem);
   white-space: pre-wrap;
 }
-.kobun-reading__transcription.reading-ltr p.is-vertical { writing-mode: vertical-lr; }
+
+.kobun-reading__transcription.reading-ltr p.is-vertical {
+  writing-mode: vertical-lr;
+}
+
 .kobun-reading__transcription.is-vertical p.is-vertical {
   flex: 0 0 auto;
   margin: 0;
 }
+
 .kobun-reading__transcription.is-vertical p.is-horizontal {
   flex: 0 0 12rem;
   writing-mode: horizontal-tb;
   white-space: normal;
 }
-.kobun-reading__translation { white-space: pre-wrap; line-height: 1.9; }
-.kobun-reading__external-status { font-size: .85rem; line-height: 1.6; padding: .5rem; background: #eef5f0; }
-.kobun-reading__external-status:empty { display: none; }
-.kobun-reading__translation-actions { display: flex; flex-wrap: wrap; gap: .4rem; }
-.kobun-reading__dialog .kobun-llm details { margin: 0; padding: 0; border: 1px solid #c8d4cd; background: #f8fbf9; }
-.kobun-reading__dialog .kobun-llm fieldset { min-inline-size: 0; }
-.kobun-reading__model { color: #617067; font-size: .8rem; overflow-wrap: anywhere; }
-.kobun-reading__warning { padding: .5rem; background: #fff3cd; }
+
+.kobun-reading__translation {
+  white-space: pre-wrap;
+  line-height: 1.9;
+}
+
+.kobun-reading__external-status {
+  font-size: .85rem;
+  line-height: 1.6;
+  padding: .5rem;
+  background: #eef5f0;
+}
+
+.kobun-reading__external-status:empty {
+  display: none;
+}
+
+.kobun-reading__translation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem;
+}
+
+.kobun-reading__dialog .kobun-llm details {
+  margin: 0;
+  padding: 0;
+  border: 1px solid #c8d4cd;
+  background: #f8fbf9;
+}
+
+.kobun-reading__dialog .kobun-llm fieldset {
+  min-inline-size: 0;
+}
+
+.kobun-reading__model {
+  color: #617067;
+  font-size: .8rem;
+  overflow-wrap: anywhere;
+}
+
+.kobun-reading__warning {
+  padding: .5rem;
+  background: #fff3cd;
+}
+
 .kobun-reading__dialog details {
   margin: 0;
   padding: 1rem 1.5rem 1.5rem;
   border-top: 1px solid #dbe3de;
   background: #fff;
 }
-.kobun-reading .kobun-reading__dialog summary { cursor: pointer; font-weight: 400; }
+
+.kobun-reading .kobun-reading__dialog summary {
+  cursor: pointer;
+  font-weight: 400;
+}
+
 .kobun-reading__warnings {
   font-size: .875rem;
 }
 
 @media (min-width: 601px) and (max-width: 1024px) and (orientation: portrait) {
-  .kobun-reading__dialog { width: min(34rem, calc(70vw - 1.5rem)); }
+  .kobun-reading__dialog {
+    width: min(34rem, calc(70vw - 1.5rem));
+  }
 }
 
-@media (max-width: 600px), (max-width: 950px) and (max-height: 500px) {
-  .kobun-reading__controls { gap: .5rem; }
-  .kobun-reading__state { max-width: 7.5rem; font-size: .65rem; }
+@media (max-width: 600px),
+(max-width: 950px) and (max-height: 500px) {
+  .kobun-reading__controls {
+    gap: .5rem;
+  }
+
+  .kobun-reading__state {
+    max-width: 7.5rem;
+    font-size: .65rem;
+  }
+
   .kobun-reading__dialog {
     inset: max(.5rem, var(--kobun-reading-safe-top)) max(.5rem, var(--kobun-reading-safe-right)) auto auto;
     width: calc(100vw - 1rem);
@@ -312,34 +522,97 @@
 
 /* Respond to a manually narrowed window as well as to the device width. */
 @container kobun-reading (max-width: 480px) {
+
   .kobun-reading__modal-heading,
-  .kobun-reading__tabpanel { padding-left: 1rem; padding-right: 1rem; }
-  .kobun-reading__modal-heading { padding-top: .75rem; padding-bottom: .65rem; gap: .5rem; }
-  .kobun-reading__modal-heading h2 { font-size: 1.25rem; }
+  .kobun-reading__tabpanel {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  .kobun-reading__modal-heading {
+    padding-top: .75rem;
+    padding-bottom: .65rem;
+    gap: .5rem;
+  }
+
+  .kobun-reading__modal-heading h2 {
+    font-size: 1.25rem;
+  }
+
   .kobun-reading__tabs,
   .kobun-reading__quality,
   .kobun-reading__responsibility,
   .kobun-reading__attribution,
-  .kobun-reading__progress { margin-left: 1rem; margin-right: 1rem; }
-  .kobun-reading__attribution dl { grid-template-columns:1fr; gap:.15rem; }
-  .kobun-reading__attribution dd { margin-bottom:.45rem; }
-  .kobun-reading__dialog details { padding-left: 1rem; padding-right: 1rem; }
+  .kobun-reading__progress {
+    margin-left: 1rem;
+    margin-right: 1rem;
+  }
+
+  .kobun-reading__attribution dl {
+    grid-template-columns: 1fr;
+    gap: .15rem;
+  }
+
+  .kobun-reading__attribution dd {
+    margin-bottom: .45rem;
+  }
+
+  .kobun-reading__dialog details {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
 }
 
 @media (max-width: 950px) and (max-height: 500px) {
-  .kobun-reading__modal-heading { padding-top: .5rem; padding-bottom: .5rem; }
-  .kobun-reading__modal-heading h2 { font-size: 1.125rem; }
-  .kobun-reading__eyebrow { font-size: .65rem; }
-  .kobun-reading__quality { margin-top: .5rem; padding: .5rem; }
-  .kobun-reading__tabs { margin-top: .75rem; }
+  .kobun-reading__modal-heading {
+    padding-top: .5rem;
+    padding-bottom: .5rem;
+  }
+
+  .kobun-reading__modal-heading h2 {
+    font-size: 1.125rem;
+  }
+
+  .kobun-reading__eyebrow {
+    font-size: .65rem;
+  }
+
+  .kobun-reading__quality {
+    margin-top: .5rem;
+    padding: .5rem;
+  }
+
+  .kobun-reading__tabs {
+    margin-top: .75rem;
+  }
 }
 
 @media (any-pointer: coarse) {
-  .kobun-reading .kobun-reading__dialog button { min-height: 2.75rem; }
-  .kobun-reading__resize-controls { height: 2.75rem; }
-  .kobun-reading .kobun-reading__resize-handle { width: 2.75rem; height: 2.75rem; }
-  .kobun-reading__window-body { padding-bottom: 2.75rem; }
-  .kobun-reading__dialog summary { min-height: 2.75rem; box-sizing: border-box; }
+  .kobun-reading .kobun-reading__dialog button {
+    min-height: 2.75rem;
+  }
+
+  .kobun-reading__resize-controls {
+    height: 2.75rem;
+  }
+
+  .kobun-reading .kobun-reading__resize-handle {
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+
+  .kobun-reading__window-body {
+    padding-bottom: 2.75rem;
+  }
+
+  .kobun-reading__dialog summary {
+    min-height: 2.75rem;
+    box-sizing: border-box;
+  }
+
   .kobun-reading__dialog .kobun-llm input:not([type="radio"]),
-  .kobun-reading__dialog .kobun-llm select { font-size: max(1rem, 16px); min-height: 2.75rem; }
+  .kobun-reading__dialog .kobun-llm select {
+    font-size: max(1rem, 16px);
+    min-height: 2.75rem;
+  }
 }
