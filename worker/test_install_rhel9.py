@@ -2,6 +2,9 @@
 import contextlib
 import io
 import json
+import shutil
+import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 import tempfile
@@ -15,6 +18,46 @@ from manage import initialize, llama_command
 class InstallTest(unittest.TestCase):
     def args(self, *extra):
         return installer.arguments(['--php-user', 'phpfixture', '--image-host', 'iiif.example.org', *extra])
+
+    def check_runtime(self, worker, cwd):
+        # Execute the real embedded check, without running dnf, pip, model
+        # downloads, service registration or any other installation step.
+        script = Path(__file__).with_name('setup-rhel9.sh').read_text()
+        program = script.partition("<<'KOBUN_PY_CHECK'\n")[2].partition('\nKOBUN_PY_CHECK')[0]
+        self.assertTrue(program)
+        return subprocess.run([sys.executable, '-c', program, str(worker)],
+            cwd=cwd, capture_output=True, text=True, timeout=10)
+
+    def test_runtime_check_supports_sqlite_without_touching_existing_data(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            doc = root/'data'/'legacy-visitor-cache'/'document.json'
+            doc.parent.mkdir(parents=True)
+            doc.write_text('{"workflow":"assist","text":"existing text"}')
+            before = {str(file.relative_to(root)): file.read_bytes() for file in root.rglob('*') if file.is_file()}
+            result = self.check_runtime(Path(__file__).resolve().parent, root)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('SQLite and cache modules check OK', result.stdout)
+            after = {str(file.relative_to(root)): file.read_bytes() for file in root.rglob('*') if file.is_file()}
+            self.assertEqual(after, before)
+
+    def test_runtime_check_rejects_incomplete_updated_worker_copy(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            shutil.copyfile(Path(__file__).with_name('cache_policy.py'), root/'cache_policy.py')
+            result = self.check_runtime(root, root)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('complete updated worker sources', result.stderr)
+            self.assertIn('cache_storage', result.stderr)
+
+    def test_runtime_check_rejects_an_interpreter_without_sqlite_support(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root/'sqlite3.py').write_text('raise ImportError("fixture: sqlite support unavailable")\n')
+            result = self.check_runtime(root, root)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('Python sqlite3 support', result.stderr)
+            self.assertIn('sqlite support unavailable', result.stderr)
 
     def test_default_is_read_only_with_limited_nine_b_model(self):
         with patch.object(installer, 'install') as install, patch.object(installer.subprocess, 'run') as run:

@@ -33,6 +33,30 @@ fi
 if [ ! -x "$KOBUN_RUNTIME/venv/bin/python" ]; then
     python3.11 -m venv "$KOBUN_RUNTIME/venv"
 fi
+
+# Check the interpreter and copied cache modules before downloads/builds.
+# Importing these modules does not open the data store or purge any cache.
+"$KOBUN_RUNTIME/venv/bin/python" - "$KOBUN_MODULE/worker" <<'KOBUN_PY_CHECK'
+import sys
+if sys.version_info < (3, 11):
+    raise SystemExit('The runtime requires Python 3.11 or newer.')
+sys.path.insert(0, sys.argv[1])
+try:
+    import sqlite3
+    from cache_policy import DEFAULTS, validate_policy
+    from cache_storage import CacheStorage
+except ImportError as error:
+    raise SystemExit('Runtime check failed. Python sqlite3 support and the complete updated worker sources are required: ' + str(error))
+validate_policy(DEFAULTS)
+try:
+    connection = sqlite3.connect(':memory:')
+    connection.execute('SELECT 1').fetchone()
+    connection.close()
+except sqlite3.Error as error:
+    raise SystemExit('Runtime SQLite check failed: ' + str(error))
+print('Runtime Python, SQLite and cache modules check OK.')
+KOBUN_PY_CHECK
+
 "$KOBUN_RUNTIME/venv/bin/python" -m pip install --only-binary=:all: -r "$KOBUN_MODULE/worker/requirements.lock"
 
 if [ "$KOBUN_MODEL_ID" = none ]; then

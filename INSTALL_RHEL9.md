@@ -45,7 +45,7 @@ sudo python3 /opt/omeka-s/modules/KobunOcrTranslation/worker/install_rhel9.py \
 2. 必要RPMを導入し、専用のnologinユーザ`kobunocr`を作成。適合する既存ユーザは再利用
 3. workerコードをroot所有の別領域へコピー。専用ユーザへOmekaの管理権限を追加せず、Omekaの権限を変更しない
 4. 専用ユーザによる一時systemdサービスでPython仮想環境を構築し、固定版llama.cppを2並列でビルド。CPU・メモリ制限は構築時にも適用
-5. 固定版のOCR・選択したLLMモデルを取得し、容量・SHA-256を検証。既存データとトークンを保持し、既存設定はバックアップ
+5. Python 3.11・SQLite・一時保存用コードの読込を確認してから、固定版のOCR・選択したLLMモデルを取得し、容量・SHA-256を検証。既存データとトークンを保持し、既存設定はバックアップ
 6. PHPユーザだけにACLで秘密ファイルの読取権限を付与し、常駐する運用サービスを登録・起動
 7. 認証付き状態取得を確認。OCR・LLMはまだ起動しない
 
@@ -73,6 +73,8 @@ sudo python3 /opt/omeka-s/modules/KobunOcrTranslation/worker/install_rhel9.py \
 
 全体管理者がモジュールを有効化し、設定の「実行サービス」からworkerとLLMを起動します。OCRが準備済みになり、LLMのモデルが9Bであることを確認します。テーマに閲覧支援ブロックを割り当て、公開現代語訳と訪問者のLLM利用範囲を設定してください。OCRのみの場合は訪問者のローカルLLMを許可しない設定にします。
 
+「閲覧支援の一時保存」で、翻刻の共有方法・期限、現代語訳の共有方法、処理用データの保存時間・件数・容量上限を確認します。初期値は翻刻24時間の共有・現代語訳の共有なし・処理用データ60分・1000件・1024 MiBです。workerが `runtime/data/temporary/` とSQLite索引を自動作成し、期限切れデータを毎分削除します。SQLiteはPython標準ライブラリを使い、別のDBサービス・SQLiteのコマンド・cron登録は不要です。図書館の編集・確認・公開用データと版履歴は、一時保存の削除対象に含めません。
+
 管理者による少数ページの試験から始め、処理時間・メモリ・既存公開サービスへの影響を確認してください。モデルサイズやサーバの仕様だけで、訳質や処理時間は保証されません。
 
 取得済みモデルの切替は同じ設定画面で、LLMサーバの停止 → モデル選択 → LLMサーバの起動の順に行います。workerの設定更新・復帰は自動で行い、処理中の切替は拒否します。新しいモデルの初回取得とサービスの資源上限の変更は、サーバ管理者が行います。画面でモデルを変えてもsystemdのメモリ・CPU上限は変わりません。
@@ -84,7 +86,13 @@ sudo systemctl status kobun-ocr-control.service
 sudo journalctl -u kobun-ocr-control.service -n 100
 ```
 
-モジュール更新時は、処理完了後にブラウザでworkerとLLMを停止し、`sudo systemctl stop kobun-ocr-control.service`を実行します。Git checkoutで`git pull --ff-only`し、インストーラを同じ引数で再実行すると実行用コピーも更新します。常駐サービスの再起動・停止は配下のworker・LLMも停止させるため、再開時はブラウザから起動します。
+モジュール更新時は、処理完了後にブラウザでworkerとLLMを停止し、`sudo systemctl stop kobun-ocr-control.service`を実行します。Git checkoutで`git pull --ff-only`し、インストーラを設置時と同じ引数で再実行すると実行用コピーも更新します。画面でモデルを切り替えた場合は、`--model`に現在選択しているモデルIDを指定してください。省略すると標準の9Bを選択します。CPU・メモリ上限やホストの指定も設置環境に合わせます。常駐サービスの再起動・停止は配下のworker・LLMも停止させるため、再開時はブラウザから起動します。
+
+### 0.11系への更新
+
+Omekaのモジュールだけを更新せず、上記のインストーラを`--apply`付きで再実行して、`/opt/kobun-ocr-translation/backend/worker`の実行用コピーも更新してください。新しい一時保存用Pythonファイルも自動でコピーします。既存の検証済みモデルは再利用し、SQLite索引の手動作成・追加の常駐サービス登録は不要です。Omeka管理画面でモジュールの更新を適用し、workerを起動します。
+
+**このworker起動時に、期限情報のない旧訪問者キャッシュを削除します。** 編集・確認・公開用の作業と版履歴は保持します。旧workerに接続したままでは新しい共有方針を保証できないため、公開画面の処理は停止します。一時保存領域をバックアップから除く場合は`runtime/data/temporary/`と`runtime/data/cache-index.sqlite3`を除外対象とし、公式作業・設定・トークンは引き続き保存してください。
 
 利用を止める場合は同じ手順で処理を止め、`sudo systemctl disable --now kobun-ocr-control.service`を実行します。Omekaでモジュールを無効化します。保存データ・モデル・ユーザは削除しません。バックアップ対象は非公開の`runtime`（特に`data`、`config.json`、トークン）とします。
 

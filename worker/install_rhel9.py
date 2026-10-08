@@ -139,11 +139,13 @@ def plan(args):
     print('1. Check OS, inactive services, ports 8765/8766/8767, paths, accounts and free disk (20 GiB recommended for 9B).')
     print('2. Install Python 3.11, pip, ACL tools, and (with LLM) git/gcc-c++/cmake/make/libcurl-devel using dnf.')
     print('3. Create the dedicated nologin account if absent. Copy worker code to the private backend tree.')
-    print('4. Build the virtual environment/llama.cpp and fetch pinned, hash-verified models in a limited temporary systemd job:')
+    print('4. Verify runtime Python/SQLite and the copied cache modules, then build/fetch pinned models in a limited temporary systemd job:')
     print('   ' + shlex.join(setup_command(args)))
     print('5. Preserve existing data/token; grant only the PHP user ACL access to token/config, outside the web tree.')
     print('6. Register and enable ONE permanent control service; do not start OCR/LLM inference automatically.')
     print('7. Check authenticated control status. Do not modify Omeka DB, local.config.php, web services or firewall.')
+    print('On the next worker start: create the temporary cache directory/index automatically; no database service or cron is needed.')
+    print('Worker 0.11+ discards old visitor caches without expiry metadata; editorial/published work and its history remain protected.')
     if args.configure_selinux:
         print('SELinux: explicitly label PHP files httpd_sys_content_t and set httpd_can_network_connect=on (persistent; affects all httpd-domain processes).')
     else:

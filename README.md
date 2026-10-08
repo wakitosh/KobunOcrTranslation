@@ -44,6 +44,8 @@
 
 RHEL 9.7では[INSTALL_RHEL9.md](INSTALL_RHEL9.md)のGitHub取得＋一括インストーラを推奨します。設置例はOmekaが`/opt/omeka-s`、バックエンドが`/opt/kobun-ocr-translation`です。Omekaの実際の配置先・PHP実行ユーザ・IIIFホストは設置環境に合わせて指定してください。設定・トークンの接続情報はWeb非公開領域から自動読込し、既存のOmeka設定は自動編集しません。
 
+インストーラは一時保存機能に必要なPythonファイルもコピーし、Python 3.11・SQLiteの利用を確認します。追加のDBサービスやcronは不要です。既存サーバの実行用コピーも更新する手順と、0.11系への移行時のキャッシュの扱いは[INSTALL_RHEL9.md](INSTALL_RHEL9.md#011系への更新)を参照してください。
+
 以下はZIP・手動設置の概要です。
 
 1. ディレクトリ名を `KobunOcrTranslation` としてOmeka Sの `modules/` に配置し、管理画面で有効化します。
