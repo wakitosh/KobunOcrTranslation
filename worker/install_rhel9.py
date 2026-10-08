@@ -19,6 +19,7 @@ import sys
 import tempfile
 import time
 from urllib.request import Request, urlopen
+from model_storage import filesystem, NFS_TYPES, require_nfs_models
 
 UNIT = 'kobun-ocr-control.service'
 MARKER = '# Managed by KobunOcrTranslation install_rhel9.py'
@@ -51,6 +52,7 @@ def arguments(argv=None):
     parser.add_argument('--php-user', type=account, required=True, help='Unix user running PHP-FPM/httpd (e.g. apache)')
     parser.add_argument('--service-user', type=account, default='kobunocr')
     parser.add_argument('--model', choices=MODELS, default=MODELS[0])
+    parser.add_argument('--models-nfs', action='store_true', help='Require an operator-mounted NFS share at <prefix>/runtime/models; keep other data local')
     parser.add_argument('--image-host', type=host, action='append', required=True, help='IIIF image host; repeat if necessary')
     parser.add_argument('--resource-host', type=host, action='append', default=[], help='Archive/manifest host; repeat if necessary')
     parser.add_argument('--threads', type=int, default=2)
@@ -79,10 +81,15 @@ def paths(args):
 
 def unit_text(args, group):
     _, runtime, backend = paths(args)
+    mount_unit = (f'RequiresMountsFor={runtime}/models\nAssertPathIsMountPoint={runtime}/models\n' if args.models_nfs else '')
+    mount_service = (f'Environment=KOBUN_MODELS_NFS=1\n'
+        f'ExecStartPre={runtime}/venv/bin/python {backend}/worker/model_storage.py --models {runtime}/models\n'
+        if args.models_nfs else '')
     return f"""{MARKER}
 [Unit]
 Description=Omeka Kobun OCR control service
 After=network.target
+{mount_unit}
 
 [Service]
 Type=simple
@@ -90,7 +97,7 @@ User={args.service_user}
 Group={group}
 WorkingDirectory={runtime}
 UMask=0077
-ExecStart={runtime}/venv/bin/python {backend}/worker/control_server.py --runtime {runtime}
+{mount_service}ExecStart={runtime}/venv/bin/python {backend}/worker/control_server.py --runtime {runtime}
 Restart=on-failure
 RestartSec=5
 KillMode=control-group
@@ -127,6 +134,8 @@ def setup_command(args):
             f'--property=MemoryMax={args.memory_max}', '--property=MemorySwapMax=0', '--property=Nice=10',
             f'--setenv=HOME={runtime}', f'--setenv=KOBUN_RUNTIME={runtime}',
             f'--setenv=KOBUN_BUILD_JOBS={args.threads}',
+            *([f'--property=RequiresMountsFor={runtime}/models',
+               f'--property=AssertPathIsMountPoint={runtime}/models', '--setenv=KOBUN_MODELS_NFS=1'] if args.models_nfs else []),
             'bash', str(backend/'worker/setup-rhel9.sh'), args.model]
 
 
@@ -136,9 +145,15 @@ def plan(args):
     print(f'Omeka module: {module}\nBackend code: {backend}\nPrivate runtime: {runtime}')
     print(f'Account: {args.service_user}; PHP token reader: {args.php_user}; Model: {args.model}')
     print(f'CPU cap: {args.cpu_quota}% (100% = one CPU); memory cap: {args.memory_max}; threads/build jobs: {args.threads}')
-    print('1. Check OS, inactive services, ports 8765/8766/8767, paths, accounts and free disk (20 GiB recommended for 9B).')
+    if args.models_nfs:
+        print(f'NFS models: {runtime}/models (must already be mounted by the operator; no mount/fstab/export changes).')
+        print('The dedicated service account must already exist and have NAS read/write/traverse access with matching UID/GID.')
+        print('Check local disk and NFS model space separately. Refuse an unmounted directory or a network-backed runtime/data.')
+        print('Only models use NFS; SQLite, jobs, logs, tokens, Python and llama.cpp stay on local storage.')
+    print('1. Check OS, inactive services, ports 8765/8766/8767, paths, accounts and free disk on each storage area.')
     print('2. Install Python 3.11, pip, ACL tools, and (with LLM) git/gcc-c++/cmake/make/libcurl-devel using dnf.')
-    print('3. Create the dedicated nologin account if absent. Copy worker code to the private backend tree.')
+    print('3. ' + ('Use the operator-prepared dedicated account.' if args.models_nfs else 'Create the dedicated nologin account if absent.')
+        + ' Copy worker code to the private backend tree.')
     print('4. Verify runtime Python/SQLite and the copied cache modules, then build/fetch pinned models in a limited temporary systemd job:')
     print('   ' + shlex.join(setup_command(args)))
     print('5. Preserve existing data/token; grant only the PHP user ACL access to token/config, outside the web tree.')
@@ -164,6 +179,77 @@ def reject_symlinks(path):
     for candidate in [path, *path.parents]:
         if candidate.is_symlink():
             raise ValueError(f'Refusing symlink path: {candidate}')
+
+
+def prepared_runtime(args, runtime):
+    """Allow ownership setup of a root-owned parent created for the mount only."""
+    return (args.models_nfs and runtime.is_dir() and runtime.stat().st_uid == 0
+        and {file.name for file in runtime.iterdir()} == {'models'})
+
+
+def pending_model_bytes(runtime, model, service_user=None):
+    manifest = json.loads(Path(__file__).with_name('models.json').read_text())
+    entries = [(runtime/'models/ndl'/entry['filename'], entry) for entry in manifest['ocr']]
+    if model != 'none':
+        entry = next(entry for entry in manifest['llm'] if entry['id'] == model)
+        entries.append((runtime/'models'/entry['filename'], entry))
+    # Metadata only: the download step still checks SHA-256. No full model scan
+    # or write to the NAS is performed during preflight.
+    if service_user:
+        # With root_squash, root may not be able to read the NAS directory. Use
+        # the service identity for both permissions and model metadata checks.
+        program = '''import json,os,sys
+from pathlib import Path
+root = Path(sys.argv[1])
+if not os.access(root, os.R_OK|os.W_OK|os.X_OK):
+    sys.exit(1)
+pending = 0
+for name,size in json.loads(sys.argv[2]):
+    file = Path(name)
+    if not file.is_file() or file.stat().st_size != size:
+        pending += size
+print(pending)
+'''
+        result = subprocess.run(['runuser', '-u', service_user, '--', 'python3', '-c', program,
+            str(runtime/'models'), json.dumps([(str(file), entry['size_bytes']) for file, entry in entries])],
+            capture_output=True, text=True, timeout=10)
+        if result.returncode:
+            raise ValueError('The service account lacks NFS model access; align UID/GID, parent traversal and NAS read/write permissions.')
+        return int(result.stdout.strip())
+    return sum(entry['size_bytes'] for file, entry in entries
+        if not file.is_file() or file.stat().st_size != entry['size_bytes'])
+
+
+def check_storage(args):
+    _, runtime, backend = paths(args)
+    models = runtime/'models'
+    reject_symlinks(models)
+    for path in (runtime, runtime/'data', backend, args.prefix/'php'):
+        if filesystem(path)['fstype'] in (*NFS_TYPES, 'cifs', 'smb3'):
+            raise ValueError('Keep runtime, SQLite/data, backend and PHP secrets on local storage; only models may use NFS.')
+    config = json.loads((runtime/'config.json').read_text()) if (runtime/'config.json').exists() else {}
+    if not args.models_nfs and (config.get('models_storage') == 'nfs' or filesystem(models)['fstype'] in NFS_TYPES):
+        raise ValueError('NFS models require --models-nfs on initial installation and every update.')
+    if args.models_nfs:
+        require_nfs_models(models, writable=True, check_access=False)
+    initial = not (runtime/'config.json').exists()
+    pending = pending_model_bytes(runtime, args.model, args.service_user if args.models_nfs else None)
+    parent = runtime
+    while not parent.exists():
+        parent = parent.parent
+    local_free = shutil.disk_usage(parent).free
+    gib = 1024**3
+    if args.models_nfs:
+        local_minimum = (3 if args.model == 'none' else 10) * gib if initial else 3 * gib
+        if local_free < local_minimum:
+            raise ValueError('Insufficient local disk for Python, build and working data (NFS model space is checked separately).')
+        if shutil.disk_usage(models).free < pending + gib:
+            raise ValueError('Insufficient NFS space for missing models and 1 GiB of headroom.')
+    else:
+        minimum = ({'none': 3, MODELS[1]: 10, MODELS[0]: 20, 'qwen35-35b-a3b-q4km': 40}[args.model] * gib
+            if initial else 3 * gib + pending)
+        if local_free < minimum:
+            raise ValueError('Insufficient free disk for setup (models, build and virtual environment).')
 
 
 def preflight(args):
@@ -194,9 +280,11 @@ def preflight(args):
             raise ValueError('Existing service account must be non-root and have a nologin shell.')
         if user.pw_uid == php.pw_uid or php.pw_gid in os.getgrouplist(user.pw_name, user.pw_gid):
             raise ValueError('Use an independent service account without membership in the PHP group.')
-        if runtime.exists() and runtime.stat().st_uid != user.pw_uid:
+        if runtime.exists() and runtime.stat().st_uid != user.pw_uid and not prepared_runtime(args, runtime):
             raise ValueError('Existing runtime belongs to a different account.')
     except KeyError:
+        if args.models_nfs:
+            raise ValueError('NFS models require an existing service account; ask the operator to create it and align NAS UID/GID first.')
         if runtime.exists():
             raise ValueError('Runtime already exists but its service account is missing.')
     state = subprocess.run(['systemctl', 'is-active', UNIT], text=True, capture_output=True).stdout.strip()
@@ -220,12 +308,7 @@ def preflight(args):
             except ProcessLookupError:
                 continue
             raise ValueError('A recorded backend process is still present; stop it explicitly.')
-    disk_parent = args.prefix
-    while not disk_parent.exists():
-        disk_parent = disk_parent.parent
-    minimum = {'none': 3, MODELS[1]: 10, MODELS[0]: 20, 'qwen35-35b-a3b-q4km': 40}[args.model] * 1024**3
-    if not (runtime/'config.json').exists() and shutil.disk_usage(disk_parent).free < minimum:
-        raise ValueError('Insufficient free disk for initial setup (models, build and virtual environment).')
+    check_storage(args)
 
 
 def write_file(path, text, mode=0o644):
@@ -327,7 +410,7 @@ def main(argv=None):
 if __name__ == '__main__':
     try:
         main()
-    except (ValueError, KeyError, OSError, subprocess.CalledProcessError) as error:
+    except (ValueError, KeyError, OSError, subprocess.SubprocessError) as error:
         print('Installation stopped: ' + str(error), file=sys.stderr)
         print('No automatic service shutdown or rollback was performed. Resolve the cause and rerun with services stopped.', file=sys.stderr)
         sys.exit(1)

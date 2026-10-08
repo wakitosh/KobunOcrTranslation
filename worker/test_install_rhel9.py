@@ -135,8 +135,8 @@ class InstallTest(unittest.TestCase):
                 with self.assertRaises(SystemExit):
                     self.args(*extra)
 
-    def preflight(self, active='inactive', listeners=''):
-        args = self.args()
+    def preflight(self, active='inactive', listeners='', args=None, missing_user=False):
+        args = args or self.args()
         fake_user = SimpleNamespace(pw_name='kobunocr', pw_uid=1001, pw_gid=1001, pw_shell='/sbin/nologin')
         php_user = SimpleNamespace(pw_uid=1004, pw_gid=1002)
         with contextlib.ExitStack() as stack:
@@ -147,12 +147,111 @@ class InstallTest(unittest.TestCase):
             stack.enter_context(patch.object(Path, 'is_symlink', return_value=False))
             stack.enter_context(patch.object(Path, 'is_file', return_value=True))
             stack.enter_context(patch.object(Path, 'exists', lambda path: str(path) in ('/opt', '/')))
-            stack.enter_context(patch.object(installer.pwd, 'getpwnam', side_effect=lambda name: php_user if name == 'phpfixture' else fake_user))
+            def account(name):
+                if name == 'phpfixture':
+                    return php_user
+                if missing_user:
+                    raise KeyError(name)
+                return fake_user
+            stack.enter_context(patch.object(installer.pwd, 'getpwnam', side_effect=account))
             stack.enter_context(patch.object(installer.os, 'getgrouplist', return_value=[1001]))
             stack.enter_context(patch.object(installer.subprocess, 'run', return_value=SimpleNamespace(stdout=active)))
             stack.enter_context(patch.object(installer.subprocess, 'check_output', return_value=listeners))
             stack.enter_context(patch.object(installer.shutil, 'disk_usage', return_value=SimpleNamespace(free=100*1024**3)))
+            stack.enter_context(patch.object(installer, 'filesystem', return_value={'fstype': 'ext4'}))
+            stack.enter_context(patch.object(installer, 'pending_model_bytes', return_value=0))
             installer.preflight(args)
+
+    def test_nfs_plan_does_not_mount_or_create_accounts(self):
+        with patch.object(installer, 'install') as install, patch.object(installer.subprocess, 'run') as run:
+            with contextlib.redirect_stdout(io.StringIO()) as output:
+                installer.main(['--php-user', 'phpfixture', '--image-host', 'iiif.example.org', '--models-nfs'])
+        install.assert_not_called()
+        run.assert_not_called()
+        self.assertIn('must already be mounted', output.getvalue())
+        self.assertIn('SQLite, jobs, logs, tokens', output.getvalue())
+
+    def test_nfs_setup_and_control_wait_for_models_and_verify_real_mount(self):
+        args = self.args('--models-nfs')
+        unit = installer.unit_text(args, 'kobunocr')
+        self.assertIn('RequiresMountsFor=/opt/kobun-ocr-translation/runtime/models', unit)
+        self.assertIn('AssertPathIsMountPoint=/opt/kobun-ocr-translation/runtime/models', unit)
+        self.assertIn('model_storage.py --models /opt/kobun-ocr-translation/runtime/models', unit)
+        self.assertIn('Environment=KOBUN_MODELS_NFS=1', unit)
+        command = installer.setup_command(args)
+        self.assertIn('--property=RequiresMountsFor=/opt/kobun-ocr-translation/runtime/models', command)
+        self.assertIn('--setenv=KOBUN_MODELS_NFS=1', command)
+        self.assertNotIn('RequiresMountsFor=', installer.unit_text(self.args(), 'kobunocr'))
+
+    def test_nfs_requires_existing_account_before_any_system_changes(self):
+        with patch.object(installer, 'run') as run:
+            with self.assertRaisesRegex(ValueError, 'existing service account'):
+                self.preflight(args=self.args('--models-nfs'), missing_user=True)
+        run.assert_not_called()
+
+    def storage_fixture(self, root):
+        args = self.args('--models-nfs', '--model', 'qwen35-35b-a3b-q4km')
+        args.prefix = root.resolve()
+        models = args.prefix/'runtime/models'
+        models.mkdir(parents=True)
+        return args, models
+
+    def test_model_and_local_disk_limits_are_checked_independently(self):
+        gib = 1024**3
+        with tempfile.TemporaryDirectory() as temp:
+            args, models = self.storage_fixture(Path(temp))
+            def local_mount(path):
+                return {'fstype': 'nfs4' if path == models else 'ext4'}
+            with patch.object(installer, 'filesystem', side_effect=local_mount), patch.object(installer, 'require_nfs_models') as mount:
+                with patch.object(installer, 'pending_model_bytes', return_value=21*gib):
+                    for local_free, nfs_free, error in ((11, 23, None), (9, 100, 'local disk'), (100, 21, 'NFS space')):
+                        with self.subTest(local=local_free, nfs=nfs_free), patch.object(installer.shutil, 'disk_usage',
+                            side_effect=lambda path: SimpleNamespace(free=(nfs_free if path == models else local_free)*gib)):
+                            if error:
+                                with self.assertRaisesRegex(ValueError, error):
+                                    installer.check_storage(args)
+                            else:
+                                installer.check_storage(args)
+                mount.assert_called_with(models, writable=True, check_access=False)
+
+    def test_update_requires_the_nfs_flag_and_keeps_sqlite_local(self):
+        with tempfile.TemporaryDirectory() as temp:
+            args, models = self.storage_fixture(Path(temp))
+            (models.parent/'config.json').write_text(json.dumps({'models_storage': 'nfs'}))
+            args.models_nfs = False
+            with patch.object(installer, 'filesystem', return_value={'fstype': 'ext4'}):
+                with self.assertRaisesRegex(ValueError, '--models-nfs'):
+                    installer.check_storage(args)
+            args.models_nfs = True
+            with patch.object(installer, 'filesystem', side_effect=lambda path: {'fstype': 'nfs4' if path.name == 'data' else 'ext4'}):
+                with self.assertRaisesRegex(ValueError, 'SQLite/data'):
+                    installer.check_storage(args)
+
+    def test_precreated_mount_parent_may_be_claimed_but_existing_data_is_protected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            args, models = self.storage_fixture(Path(temp))
+            runtime = models.parent
+            with patch.object(Path, 'stat', return_value=SimpleNamespace(st_uid=0, st_mode=0o40755)):
+                self.assertTrue(installer.prepared_runtime(args, runtime))
+                (runtime/'data').mkdir()
+                self.assertFalse(installer.prepared_runtime(args, runtime))
+
+    def test_metadata_capacity_probe_runs_as_service_user_without_writing_models(self):
+        with tempfile.TemporaryDirectory() as temp:
+            runtime = Path(temp)
+            models = runtime/'models'
+            models.mkdir()
+            actual_run = subprocess.run
+            def run_as_fixture(command, **kwargs):
+                self.assertEqual(command[:5], ['runuser', '-u', 'kobunocr', '--', 'python3'])
+                return actual_run([sys.executable, *command[5:]], **kwargs)
+            with patch.object(installer.subprocess, 'run', side_effect=run_as_fixture):
+                pending = installer.pending_model_bytes(runtime, 'qwen35-35b-a3b-q4km', 'kobunocr')
+            self.assertGreater(pending, 22285080384)
+            self.assertEqual(list(models.iterdir()), [])
+            with patch.object(installer.subprocess, 'run', return_value=SimpleNamespace(returncode=1)):
+                with self.assertRaisesRegex(ValueError, 'service account lacks NFS'):
+                    installer.pending_model_bytes(runtime, 'none', 'kobunocr')
 
     def test_active_service_or_occupied_port_refused_before_mutation(self):
         with self.assertRaisesRegex(ValueError, 'running'):

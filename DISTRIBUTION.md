@@ -40,6 +40,8 @@ Qwenモデルも本体とは別のライセンスです。モデルファイル�
 
 **RHEL 9.7の一括導入は[INSTALL_RHEL9.md](INSTALL_RHEL9.md)を参照してください。** `/opt/omeka-s`のモジュールディレクトリへGitHubのコードを取得し、`worker/install_rhel9.py`で`/opt/kobun-ocr-translation`へバックエンドを構築します。計画表示が初期動作で、`--apply`時だけ専用ユーザ作成・環境構築・サービス登録を行います。Omekaの配置先、PHP実行ユーザ、IIIFホストは設置環境に合わせて指定してください。
 
+モデルだけをNFSへ置く一括導入には`--models-nfs`を追加します。サーバ管理者が専用ユーザとNAS側のUID/GID・権限を整え、`/opt/kobun-ocr-translation/runtime/models`を先にマウントします。モデル以外の実行環境・設定・作業データ・SQLite索引はローカルです。マウントの登録・変更はインストーラでは行いません。[NFS配置の詳細](INSTALL_RHEL9.md#モデルだけをnfsに置く場合)
+
 以下は構成を個別に確認したい場合の手動設置例です。一括導入と併用せず、配置・ユーザ・接続設定を揃えてください。
 
 以下はOmeka Sの配置先を `/var/www/omeka-s`、非公開の実行領域を `/var/lib/kobun-ocr-translation` とした例です。実際の配置先、PHP実行ユーザー、IIIFホストは環境に合わせて置き換えてください。workerとLLMサーバは個別の常駐サービスを登録せず、Omekaのモジュール設定画面から起動・停止します。画面から両者を起動できるよう、**運用サービスだけ**をsystemdで常駐させます。この手順はRHEL 9.7向けに作成しましたが、RHEL 9.7実機での導入・性能検証はまだ行っていません。

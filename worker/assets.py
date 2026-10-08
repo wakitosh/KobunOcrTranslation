@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import shutil
 import urllib.request
+from model_storage import check_runtime_models
 
 MANIFEST = Path(__file__).with_name('models.json')
 
@@ -58,6 +59,7 @@ def main():
         return
     if not args.runtime or not (args.model or args.ocr):
         parser.error('--runtime and --model and/or --ocr are required')
+    check_runtime_models(args.runtime, writable=args.action == 'fetch')
     entries = []
     if args.ocr:
         entries += [(args.runtime/'models/ndl'/entry['filename'], entry) for entry in catalog()['ocr']]

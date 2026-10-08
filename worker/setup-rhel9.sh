@@ -24,6 +24,7 @@ if [ "${ID:-}" != rhel ] || [[ "${VERSION_ID:-}" != 9.* ]]; then
     exit 1
 fi
 
+python3 "$KOBUN_MODULE/worker/model_storage.py" --runtime "$KOBUN_RUNTIME" --writable
 mkdir -p "$KOBUN_RUNTIME/models" "$KOBUN_RUNTIME/llama"
 chmod 0700 "$KOBUN_RUNTIME"
 if ! command -v python3.11 >/dev/null 2>&1; then

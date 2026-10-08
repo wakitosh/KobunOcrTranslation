@@ -67,6 +67,34 @@ sudo python3 /opt/omeka-s/modules/KobunOcrTranslation/worker/install_rhel9.py \
 
 35B-A3Bは`--model qwen35-35b-a3b-q4km`を指定します。モデルだけで22.29GBあり、初回は40GiB以上の空き容量を確認します。この構成の初期メモリ上限は48Gで、CPU上限・スレッド数は9Bと同じです。共有サーバでこのメモリ上限を許容できるか確認し、実行前に設置先の負荷と必要メモリを検証してください。
 
+### モデルだけをNFSに置く場合
+
+`--models-nfs`を追加すると、`/opt/kobun-ocr-translation/runtime/models`を**NFSのマウントポイントとして必須**にします。コード、Python環境、llama.cpp、設定、認証トークン、作業データ、SQLite索引、ログはローカルに残します。カスタム`--prefix`では、その配下の`runtime/models`を使います。
+
+導入業者・サーバ管理者が先に準備する内容：
+
+1. 専用のnologinユーザ`kobunocr`を作成し、NAS側のアクセス権とUID/GIDを合わせる。NFS構成では、インストーラ実行前にこのユーザが必要です。
+2. `runtime/models`へ専用のNFS領域をマウントし、再起動後もsystemdがマウントできるよう登録する。**ディレクトリを作るだけでは未完了**です。
+3. 専用ユーザが親ディレクトリを通過でき、モデル領域を読み書きできるようにする。`root_squash`を維持したまま、NAS側で権限を設定してください。インストーラはNFSの所有者・ACL・export・マウント設定を変更しません。
+
+マウントポイントのために作成したroot所有の`runtime`は、その直下に`models`だけがある場合、インストーラがローカルの親ディレクトリを専用ユーザ所有へ設定できます。ほかのデータがある場合は、既存所有者の確認を省略しません。
+
+承認・マウント後に、35B-A3B構成の計画を確認する例：
+
+```sh
+python3 /opt/omeka-s/modules/KobunOcrTranslation/worker/install_rhel9.py \
+  --php-user apache --image-host iiif.example.org --resource-host archive.example.org \
+  --models-nfs --model qwen35-35b-a3b-q4km
+```
+
+実行時は同じコマンドに`sudo`と`--apply`を追加します。NFS未マウント、通常のディレクトリ、symlink、読取専用マウント、専用ユーザのアクセス権不足は導入前に拒否します。更新時にも`--models-nfs`を指定してください。
+
+空き容量は別々に確認します。LLMありの初回構築はローカル10GiB以上、NFSは未取得モデルの合計容量＋1GiB以上を必要とします（35B-A3BとOCRの新規取得なら約22GiB以上）。これは導入時の最小条件であり、作業データ・バックアップ・ほかのサービスの増加分は別途確保してください。取得済みファイルはサイズだけで必要な追加容量を計算し、実際の取得・起動時には従来どおりSHA-256を検証します。
+
+常駐サービスと一時構築サービスにマウント依存関係を設定し、起動時にも実際のNFSマウントを確認します。設定にNFS配置を記録するため、モデル取得コマンドを直接実行しても、未マウントのローカルディレクトリへのダウンロードを拒否します。NFSの読込・ハッシュ検証の時間と、初回・二回目以降の翻訳時間は設置環境で比較してください。特に35Bでは起動時に約22GBをハッシュ検証するため、低速な接続では管理画面の通信やサービス操作のタイムアウトに達する可能性があります。ネットワーク断時の応答時間はNFSの設定にも依存します。
+
+SQLiteをNFSに置く構成は一括インストーラでは対象外です。[SQLite公式のネットワーク保存に関する説明](https://sqlite.org/useovernet.html)、[RHEL向けsystemdのマウント依存関係](https://redhat-plumbers.github.io/systemd-rhel9/systemd.unit.html#RequiresMountsFor=)
+
 実行領域の親は`--prefix /opt/kobun-backend`で変更できます（パスは英数字等で指定）。その場合は、生成された`php/backend.json`に従ってOmekaの`config/local.config.php`へ`kobun_ocr`を設定してください。標準配置ではモジュールが接続設定を自動読込するため、その編集は不要です。既存の`local.config.php`に`kobun_ocr`がある場合はそちらが優先されます。トークンの値は設定ファイルへ直接記載せず、秘密ファイルのパスを指定してください。
 
 ## 3. Omeka側で有効化

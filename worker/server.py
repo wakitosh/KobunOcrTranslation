@@ -244,6 +244,8 @@ def main():
     lease = (runtime/"worker.lock").open("a")
     fcntl.flock(lease, fcntl.LOCK_EX | fcntl.LOCK_NB)
     config = worker_config(json.loads((runtime/"config.json").read_text()))
+    from model_storage import check_runtime_models
+    check_runtime_models(runtime, config)
     token_file = runtime/"backend-token"
     if not token_file.exists():
         token_file.write_text(secrets.token_urlsafe(40))

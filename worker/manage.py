@@ -11,6 +11,7 @@ import tempfile
 import time
 from assets import catalog, model_entry, verify
 from translation_policy import MODERN_REVISION
+from model_storage import check_runtime_models
 
 # Development default shared with the Omeka module configuration. Production
 # installations should set KOBUN_RUNTIME to a private application-data path
@@ -66,6 +67,7 @@ def initialize(runtime, model_id=None, ocr_only=False, llm_backend=None):
         token.write_text(secrets.token_urlsafe(40)); token.chmod(0o600)
     file = runtime/'config.json'
     config = json.loads(file.read_text()) if file.exists() else {}
+    nfs_models = check_runtime_models(runtime, config)
     if not model_id and not ocr_only and not llm_backend and config:
         return config
     if not model_id and not ocr_only:
@@ -82,6 +84,7 @@ def initialize(runtime, model_id=None, ocr_only=False, llm_backend=None):
         'context_size': 4096, 'enable_thinking': False, 'max_output_tokens': 1024, 'job_timeout': 300,
         'image_hosts': ['dc.tulips.tsukuba.ac.jp']}
     config = {**defaults, **config, 'ndl_model_dir': str(runtime/'models/ndl'),
+        'models_storage': 'nfs' if nfs_models else 'local',
         'ndl_code_root': str(Path(__file__).parent/'vendor/ndlkotenocr'),
         'ndl_revision': 'ede4283845cdc0ba2bda8b7ebfc3dc80b33c92c8',
         'llm_model_id': model_id or '', 'llm_model_path': str(model) if model else '', 'llm_model': entry['name'] if entry else '',

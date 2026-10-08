@@ -17,7 +17,8 @@ PATTERNS = ['config/*.php', 'config/*.ini', 'src/**/*.php', 'view/**/*.phtml', '
 def release_files():
     files = {MODULE/name for name in ROOT_FILES}
     for pattern in PATTERNS:
-        files.update(file for file in MODULE.glob(pattern) if file.is_file() and '__pycache__' not in file.parts)
+        files.update(file for file in MODULE.glob(pattern) if file.is_file()
+            and file.name != '.DS_Store' and not any(part in ('__pycache__', '.git') for part in file.parts))
     for file in files:
         relative = file.relative_to(MODULE)
         if file.is_symlink() or file.suffix in ('.gguf', '.onnx', '.pyc') or file.stat().st_size > 2_000_000:

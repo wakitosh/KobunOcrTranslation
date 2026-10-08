@@ -46,6 +46,8 @@ RHEL 9.7では[INSTALL_RHEL9.md](INSTALL_RHEL9.md)のGitHub取得＋一括イン
 
 インストーラは一時保存機能に必要なPythonファイルもコピーし、Python 3.11・SQLiteの利用を確認します。追加のDBサービスやcronは不要です。既存サーバの実行用コピーも更新する手順と、0.11系への移行時のキャッシュの扱いは[INSTALL_RHEL9.md](INSTALL_RHEL9.md#011系への更新)を参照してください。
 
+モデルだけをNFSに置く場合は`runtime/models`へマウントし、インストーラに`--models-nfs`を指定できます。ディレクトリ作成だけでは導入を開始せず、実際のマウント・専用ユーザの権限・ローカルとNFSの空き容量を確認します。SQLiteや作業データはローカルに保持します。[NFS配置の準備と導入手順](INSTALL_RHEL9.md#モデルだけをnfsに置く場合)
+
 以下はZIP・手動設置の概要です。
 
 1. ディレクトリ名を `KobunOcrTranslation` としてOmeka Sの `modules/` に配置し、管理画面で有効化します。
