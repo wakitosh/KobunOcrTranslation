@@ -21,6 +21,15 @@ def filesystem(path):
         result = subprocess.run(['findmnt', '--json', '--first-only', '--target', str(path),
             '--output', 'TARGET,FSTYPE,OPTIONS'], check=True, capture_output=True, text=True, timeout=10)
         mounts = json.loads(result.stdout)['filesystems']
+        if len(mounts) == 1 and mounts[0].get('fstype') == 'autofs':
+            # Enter the directory to activate a direct automount. findmnt can
+            # still select the autofs placeholder when NFS is stacked on it;
+            # filtering filesystem types selects the actual model share.
+            os.stat(str(path) + '/.')
+            result = subprocess.run(['findmnt', '--json', '--first-only', '--target', str(path),
+                '--types', ','.join(NFS_TYPES), '--output', 'TARGET,FSTYPE,OPTIONS'],
+                check=True, capture_output=True, text=True, timeout=10)
+            mounts = json.loads(result.stdout)['filesystems']
         if len(mounts) != 1 or not all(mounts[0].get(key) for key in ('target', 'fstype', 'options')):
             raise ValueError('Incomplete mount information')
         return mounts[0]

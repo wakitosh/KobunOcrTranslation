@@ -111,6 +111,28 @@ class ModelStorageTest(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, 'Cannot determine'):
                     storage.filesystem(root)
 
+    def test_direct_automount_is_entered_and_actual_nfs_mount_selected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            models = Path(temp).resolve()
+            responses = [SimpleNamespace(stdout=json.dumps({'filesystems': [self.mount(models, kind)]}))
+                for kind in ('autofs', 'nfs')]
+            real_stat = os.stat
+            with patch.object(storage.subprocess, 'run', side_effect=responses) as run, \
+                    patch.object(storage.os, 'stat', wraps=real_stat) as stat:
+                self.assertEqual(storage.require_nfs_models(models, writable=True)['fstype'], 'nfs')
+                self.assertIn('--types', run.call_args.args[0])
+                self.assertIn('nfs,nfs4', run.call_args.args[0])
+                stat.assert_any_call(str(models) + '/.')
+
+    def test_automount_without_actual_nfs_fails_closed(self):
+        with tempfile.TemporaryDirectory() as temp:
+            models = Path(temp).resolve()
+            placeholder = SimpleNamespace(stdout=json.dumps({'filesystems': [self.mount(models, 'autofs')]}))
+            with patch.object(storage.subprocess, 'run', side_effect=[placeholder,
+                    subprocess.CalledProcessError(1, 'findmnt')]):
+                with self.assertRaisesRegex(ValueError, 'Cannot determine'):
+                    storage.require_nfs_models(models, writable=True)
+
 
 if __name__ == '__main__':
     unittest.main()
