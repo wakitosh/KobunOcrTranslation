@@ -11,6 +11,7 @@ class DocxTranscriptionParser
     private const MAX_SECTIONS = 1000;
     private const MAX_LINES_PER_SECTION = 500;
     private const MAX_LINE_CHARS = 4000;
+    private const NOTE_NUMBERS = '一二三四五六七八九十百千万〇零壱弐参拾0-9０-９';
 
     public function parse(string $path, string $filename = ''): array
     {
@@ -62,12 +63,18 @@ class DocxTranscriptionParser
         }
 
         $paragraphs = [];
+        $editorialNoteHeadings = [];
         foreach ($nodes as $paragraph) {
+            // Classify before removing note numbers: a trailing note section may
+            // begin with "注一" instead of a separate "注" heading.
+            $isNoteHeading = $this->isEditorialNoteHeading($this->plainParagraphText($paragraph, $xpath));
+            $this->removeEditorialNoteReferences($paragraph, $xpath);
             $text = $this->paragraphText($paragraph, $xpath);
             $text = str_replace(["\r\n", "\r", "\u{00a0}"], ["\n", "\n", ' '], $text);
             $text = preg_replace('/[ \t\n\x{3000}]+$/u', '', $text) ?? $text;
-            if ($text !== '') {
+            if ($text !== '' || $isNoteHeading) {
                 $paragraphs[] = $text;
+                $editorialNoteHeadings[] = $isNoteHeading;
             }
         }
         if (!$paragraphs) {
@@ -80,7 +87,7 @@ class DocxTranscriptionParser
         $sections = [];
         $current = null;
         $fallback = [];
-        foreach ($paragraphs as $paragraph) {
+        foreach ($paragraphs as $index => $paragraph) {
             $heading = preg_replace('/[\s　]+/u', '', $paragraph);
             if (preg_match('/^[二2２][、.．]凡例$/u', $heading)) {
                 $inLegend = true;
@@ -97,6 +104,9 @@ class DocxTranscriptionParser
                 }
                 continue;
             }
+            if ($transcriptionStarted && $editorialNoteHeadings[$index]) {
+                break;
+            }
 
             $marker = $this->pageMarker($paragraph);
             if ($marker !== null) {
@@ -112,9 +122,6 @@ class DocxTranscriptionParser
             }
             if (!$transcriptionStarted) {
                 continue;
-            }
-            if ($current !== null && preg_match('/^(注|註|参考文献)$/u', trim($paragraph))) {
-                break;
             }
             $parts = preg_split('/\n/u', $paragraph) ?: [];
             foreach ($parts as $part) {
@@ -158,8 +165,9 @@ class DocxTranscriptionParser
             'metadata' => $metadata,
             'notation' => [
                 '［丁数オ／ウ］をページ区切りとして検出',
-                '右ルビ・上側の注記を ^(...) に変換',
+                '右ルビ・上側の書入を ^(...) に変換（頭注・脚注を除く）',
                 '左ルビ・下側の注記を _(...) に変換',
+                '頭注・脚注を通常の文字として保持し、番号付きの編集注を除外',
                 '下線を ＿...＿ に変換',
                 '字下げ、踊り字、括弧類を保持',
             ],
@@ -228,7 +236,7 @@ class DocxTranscriptionParser
             $authors = str_replace("\n", '・', $metadata['contributors']);
             $metadata['citation'] = $authors . '（' . $metadata['publication_year'] . '）「'
                 . $metadata['title'] . '」『' . $metadata['journal_title'] . '』'
-                . ($metadata['journal_issue'] ?? '') . '。';
+                . ($metadata['journal_issue'] ?? '') . '.';
         }
         return $metadata;
     }
@@ -252,7 +260,9 @@ class DocxTranscriptionParser
         $fieldCode = null;
         $fieldDisplay = '';
         $fieldSeparated = false;
-        $flush = static function () use (&$result, &$buffer, &$format): void {
+        $marginalNote = preg_match('/^[\s　]*[〈《＜<【［（(\[]?[\s　]*[頭脚][注註]/u',
+            $this->plainParagraphText($paragraph, $xpath)) === 1;
+        $flush = static function () use (&$result, &$buffer, &$format, $marginalNote): void {
             if ($buffer === '') {
                 return;
             }
@@ -260,7 +270,8 @@ class DocxTranscriptionParser
             if (str_contains($format, 'underline')) {
                 $text = '＿' . $text . '＿';
             }
-            if (str_contains($format, 'superscript')) {
+            if (str_contains($format, 'superscript') && !$marginalNote
+                && !preg_match('/^[\s　]*[頭脚][注註][\s　]*$/u', $buffer)) {
                 $text = '^(' . $text . ')';
             }
             $result .= $text;
@@ -331,6 +342,7 @@ class DocxTranscriptionParser
     /** Convert legacy Word EQ overstrike fields used for left/right ruby. */
     private function equationRubyText(string $code): ?string
     {
+        $code = $this->withoutEditorialNoteReferences($code);
         if (!preg_match('/^\s*EQ\b/iu', $code)) {
             return null;
         }
@@ -350,9 +362,11 @@ class DocxTranscriptionParser
         $base = '';
         $right = [];
         $left = [];
+        $hadAnnotation = false;
         foreach ($this->splitFieldArguments($content) as $argument) {
             $argument = $this->trimFieldText($argument);
             if (preg_match('/^\\\\s\\\\(up|do)\s+\d+\s*(\()/iu', $argument, $match, PREG_OFFSET_CAPTURE)) {
+                $hadAnnotation = true;
                 $annotation = $this->parenthesizedContent($argument, $match[2][1]);
                 $annotation = $annotation === null ? '' : $this->trimFieldText($annotation);
                 if ($annotation !== '') {
@@ -366,7 +380,7 @@ class DocxTranscriptionParser
                 $base = $argument;
             }
         }
-        if ($base === '' || (!$right && !$left)) {
+        if ($base === '' || (!$right && !$left && !$hadAnnotation)) {
             return null;
         }
         foreach ($right as $annotation) {
@@ -376,6 +390,63 @@ class DocxTranscriptionParser
             $base .= '_(' . $annotation . ')';
         }
         return $base;
+    }
+
+    private function plainParagraphText(\DOMNode $paragraph, \DOMXPath $xpath): string
+    {
+        $text = '';
+        foreach ($xpath->query('.//w:t[not(ancestor::w:del) and not(ancestor::w:rt)] | .//w:tab | .//w:br | .//w:cr', $paragraph) ?: [] as $node) {
+            $text .= $node->localName === 't' ? $node->textContent : "\n";
+        }
+        return $text;
+    }
+
+    private function isEditorialNoteHeading(string $text): bool
+    {
+        $text = $this->trimFieldText($text);
+        return preg_match('/^(?:注|註|参考文献)$/u', $text) === 1
+            || preg_match('/^[注註][ \t　]*[' . self::NOTE_NUMBERS . ']+(?=[\s　:：.．、。]|$)/u', $text) === 1;
+    }
+
+    private function withoutEditorialNoteReferences(string $text): string
+    {
+        return preg_replace('/(?<![頭脚])[注註][ \t　]*[' . self::NOTE_NUMBERS . ']+/u', '', $text) ?? $text;
+    }
+
+    /** Remove references across Word runs before their formatting becomes ruby notation. */
+    private function removeEditorialNoteReferences(\DOMNode $paragraph, \DOMXPath $xpath): void
+    {
+        $text = '';
+        $spans = [];
+        foreach ($xpath->query('.//w:t | .//w:tab | .//w:br | .//w:cr | .//w:instrText', $paragraph) ?: [] as $node) {
+            if ($node->localName !== 't') {
+                // A line break or field instruction is not an adjacent text run.
+                $text .= "\n";
+                continue;
+            }
+            $start = strlen($text);
+            $text .= $node->textContent;
+            $spans[] = [$node, $start, strlen($text)];
+        }
+        if (!preg_match_all('/(?<![頭脚])[注註][ \t　]*[' . self::NOTE_NUMBERS . ']+/u', $text, $matches, PREG_OFFSET_CAPTURE)) {
+            return;
+        }
+        foreach ($spans as [$node, $start, $end]) {
+            $value = $node->textContent;
+            foreach (array_reverse($matches[0]) as [$reference, $offset]) {
+                $left = max($start, $offset);
+                $right = min($end, $offset + strlen($reference));
+                if ($left < $right) {
+                    $value = substr_replace($value, '', $left - $start, $right - $left);
+                }
+            }
+            if ($value !== $node->textContent) {
+                while ($node->firstChild) {
+                    $node->removeChild($node->firstChild);
+                }
+                $node->appendChild($node->ownerDocument->createTextNode($value));
+            }
+        }
     }
 
     private function parenthesizedContent(string $value, int $open): ?string
