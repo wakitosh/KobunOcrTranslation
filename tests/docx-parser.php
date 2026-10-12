@@ -61,6 +61,33 @@ $xml = <<<'XML'
       <w:r><w:instrText>EQ \o(\s\up 8(注二),注意書き)</w:instrText></w:r>
       <w:r><w:fldChar w:fldCharType="end"/></w:r>
     </w:p>
+    <w:p>
+      <w:r><w:rPr><w:vertAlign w:val="superscript"/></w:rPr><w:t xml:space="preserve">　（は</w:t></w:r>
+      <w:r><w:rPr><w:vertAlign w:val="superscript"/></w:rPr><w:t xml:space="preserve">ィ） </w:t></w:r>
+    </w:p>
+    <w:p><w:r><w:ruby>
+      <w:rt><w:r><w:t xml:space="preserve">　（伺&#xA0;</w:t><w:tab/></w:r><w:r><w:t xml:space="preserve">　候） </w:t></w:r></w:rt>
+      <w:rubyBase><w:r><w:t>本　文</w:t></w:r></w:rubyBase>
+    </w:ruby></w:r><w:r><w:t>　続き</w:t></w:r></w:p>
+    <w:p>
+      <w:r><w:fldChar w:fldCharType="begin"/></w:r>
+      <w:r><w:instrText>EQ \o(\s\up 8(　（はィ） ),\s\do 5(　（伺&#x202F;　&#x2009;候） ),本　文)</w:instrText></w:r>
+      <w:r><w:fldChar w:fldCharType="end"/></w:r>
+    </w:p>
+    <w:p>
+      <w:r><w:t>前</w:t></w:r>
+      <w:r><w:rPr><w:vertAlign w:val="superscript"/></w:rPr><w:t xml:space="preserve">　 </w:t><w:tab/></w:r>
+      <w:r><w:t>後</w:t></w:r>
+    </w:p>
+    <w:p><w:r><w:ruby><w:rt><w:r><w:t xml:space="preserve">　&#xA0; </w:t></w:r></w:rt><w:rubyBase><w:r><w:t>字</w:t></w:r></w:rubyBase></w:ruby></w:r></w:p>
+    <w:p>
+      <w:r><w:fldChar w:fldCharType="begin"/></w:r>
+      <w:r><w:instrText>EQ \o(\s\up 8(　 ),\s\do 5(　 ),空白ルビ)</w:instrText></w:r>
+      <w:r><w:fldChar w:fldCharType="end"/></w:r>
+    </w:p>
+    <w:p><w:r><w:rPr><w:vertAlign w:val="superscript"/></w:rPr><w:t>〈頭注　人物 名〉</w:t></w:r></w:p>
+    <w:p><w:r><w:rPr><w:u w:val="single"/></w:rPr><w:t>字　句</w:t></w:r></w:p>
+    <w:p><w:r><w:rPr><w:vertAlign w:val="superscript"/><w:u w:val="single"/></w:rPr><w:t xml:space="preserve">　（伺　候） </w:t></w:r></w:p>
     <w:p><w:r><w:t>［一ウ］</w:t></w:r></w:p>
     <w:p><w:r><w:t>次のページの本文註十</w:t></w:r></w:p>
     <w:p><w:r><w:rPr><w:vertAlign w:val="superscript"/></w:rPr><w:t>注一</w:t></w:r></w:p>
@@ -83,14 +110,23 @@ try {
     $result = (new DocxTranscriptionParser())->parse($path, 'ruby-test.docx');
     $actual = $result['sections'][0]['lines'] ?? [];
     $expected = [
-        '又こうあん_(（弘　　安）)三年',
-        'るゑんたう^(（え）)_(（筵　道）)',
+        '又こうあん_(（弘安）)三年',
+        'るゑんたう^(（え）)_(（筵道）)',
         '字^(みぎ)',
         '〈頭注（人物）〉',
         '〈脚注末尾の書入〉',
         '本文を確かめる^(（よみ）)続き',
         '〈頭注一日の書入〉',
         '注意書き',
+        '^(（はィ）)',
+        '本　文^(（伺候）)　続き',
+        '本　文^(（はィ）)_(（伺候）)',
+        '前後',
+        '字',
+        '空白ルビ',
+        '〈頭注　人物 名〉',
+        '＿字　句＿',
+        '^(＿（伺候）＿)',
     ];
     if ($actual !== $expected) {
         fwrite(STDERR, "Unexpected transcription:\n" . json_encode($actual, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) . "\n");

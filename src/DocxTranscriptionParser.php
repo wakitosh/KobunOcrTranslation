@@ -262,27 +262,31 @@ class DocxTranscriptionParser
         $fieldSeparated = false;
         $marginalNote = preg_match('/^[\s　]*[〈《＜<【［（(\[]?[\s　]*[頭脚][注註]/u',
             $this->plainParagraphText($paragraph, $xpath)) === 1;
-        $flush = static function () use (&$result, &$buffer, &$format, $marginalNote): void {
+        $flush = function () use (&$result, &$buffer, &$format, $marginalNote): void {
             if ($buffer === '') {
                 return;
             }
-            $text = $buffer;
+            $isRuby = str_contains($format, 'superscript') && !$marginalNote
+                && !preg_match('/^[\s　]*[頭脚][注註][\s　]*$/u', $buffer);
+            $text = $isRuby ? $this->normalizeRubyText($buffer) : $buffer;
+            $buffer = '';
+            if ($text === '') {
+                return;
+            }
             if (str_contains($format, 'underline')) {
                 $text = '＿' . $text . '＿';
             }
-            if (str_contains($format, 'superscript') && !$marginalNote
-                && !preg_match('/^[\s　]*[頭脚][注註][\s　]*$/u', $buffer)) {
+            if ($isRuby) {
                 $text = '^(' . $text . ')';
             }
             $result .= $text;
-            $buffer = '';
         };
 
         foreach ($nodes as $node) {
             if ($node->localName === 'ruby') {
                 $flush();
                 $base = $this->nodeText($xpath->query('.//w:rubyBase//w:r', $node), $xpath);
-                $reading = $this->nodeText($xpath->query('.//w:rt//w:r', $node), $xpath);
+                $reading = $this->normalizeRubyText($this->nodeText($xpath->query('.//w:rt//w:r', $node), $xpath));
                 $result .= $base . ($reading !== '' ? '^(' . $reading . ')' : '');
                 $format = '';
                 continue;
@@ -368,7 +372,7 @@ class DocxTranscriptionParser
             if (preg_match('/^\\\\s\\\\(up|do)\s+\d+\s*(\()/iu', $argument, $match, PREG_OFFSET_CAPTURE)) {
                 $hadAnnotation = true;
                 $annotation = $this->parenthesizedContent($argument, $match[2][1]);
-                $annotation = $annotation === null ? '' : $this->trimFieldText($annotation);
+                $annotation = $annotation === null ? '' : $this->normalizeRubyText($annotation);
                 if ($annotation !== '') {
                     if (mb_strtolower($match[1][0]) === 'up') {
                         $right[] = $annotation;
@@ -502,6 +506,12 @@ class DocxTranscriptionParser
     private function trimFieldText(string $value): string
     {
         return preg_replace('/^[\s\x{3000}]+|[\s\x{3000}]+$/u', '', $value) ?? trim($value);
+    }
+
+    /** Word uses spacing to position readings; keep only the ruby characters. */
+    private function normalizeRubyText(string $value): string
+    {
+        return preg_replace('/[\s\p{Z}]+/u', '', $value) ?? $value;
     }
 
     private function nodeText($runs, \DOMXPath $xpath): string
