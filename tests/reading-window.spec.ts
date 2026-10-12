@@ -9,8 +9,10 @@ const storageKey = 'kobun-reading-window-v1';
 const popup = (page: Page) => page.locator('.kobun-reading__dialog');
 const box = async (element: Locator) => (await element.boundingBox())!;
 
-async function fixture(page: Page, options: { translation?: boolean; data?: Record<string, unknown> } = {}) {
-  const html = execFileSync('php', ['tests/reading-fixture.php', options.translation ? 'enabled' : 'disabled'], { encoding: 'utf8' });
+async function fixture(page: Page, options: { translation?: boolean; cacheAdministrator?: boolean; data?: Record<string, unknown> } = {}) {
+  const args = ['tests/reading-fixture.php', options.translation ? 'enabled' : 'disabled'];
+  if (options.cacheAdministrator) args.push('', 'global_admin');
+  const html = execFileSync('php', args, { encoding: 'utf8' });
   await page.route('**/*', route => route.abort());
   await page.route(`${origin}/**`, route => {
     const pathname = new URL(route.request().url()).pathname;
@@ -240,6 +242,76 @@ async function drag(page: Page, target: Locator, dx: number, dy: number) {
 async function sameBox(element: Locator, expected: { x: number; y: number; width: number; height: number }) {
   const actual = await box(element);
   for (const name of ['x', 'y', 'width', 'height'] as const) expect(actual[name]).toBeCloseTo(expected[name], 0);
+}
+
+for (const direction of ['rtl', 'ltr']) {
+  test(`deleting ${direction} machine transcription leaves a left-aligned horizontal notice`, async ({ page }) => {
+    await fixture(page, { cacheAdministrator: true, data: {
+      quality: 'machine', label: '機械生成・未確認', revision: 1, status: 'recognize',
+      reading_direction: direction, can_manage_cache: true, can_manage_translation_cache: false,
+      lines: [{ order: 1, text: '春はあけぼの^(よあけ)。', direction: 'vertical' }],
+    } });
+    const transcription = page.locator('.kobun-reading__transcription');
+    await expect(page.locator('.kobun-reading__notation')).toBeVisible();
+    await page.route(`${origin}/reading/cache`, route => {
+      expect(route.request().postDataJSON()).toMatchObject({ target: 'transcription', action: 'delete', base_revision: 1 });
+      return route.fulfill({ json: {
+        id: '1234567890abcdef12345678', quality: 'machine', label: '機械生成・未確認', revision: 2,
+        status: 'cache_deleted', lines: [], transcription: '', job: null, translation: null,
+        can_manage_cache: true, can_manage_translation_cache: false, transcription_metadata: {},
+      } });
+    });
+    page.on('dialog', dialog => dialog.accept());
+    await page.locator('.kobun-reading__cache summary').click();
+    await page.locator('[data-cache-target="transcription"][data-cache-action="delete"]').click();
+    await expect(transcription).toHaveText('機械翻刻は保存されていません。');
+    await expect(page.locator('.kobun-reading__notation')).toBeHidden();
+    const position = await transcription.evaluate(element => {
+      const range = document.createRange(); range.selectNodeContents(element);
+      const style = getComputedStyle(element);
+      return { mode: style.writingMode, display: style.display,
+        offset: range.getBoundingClientRect().left - element.getBoundingClientRect().left };
+    });
+    expect(position.mode).toBe('horizontal-tb');
+    expect(position.display).toBe('block');
+    expect(Math.abs(position.offset)).toBeLessThan(1);
+    await expect(page.locator('[data-cache-target="transcription"][data-cache-action="regenerate"]')).toBeEnabled();
+  });
+}
+
+for (const mode of ['rtl', 'ltr', 'horizontal']) {
+  test(`${mode} ruby markers share a bar shape, distinguish sides, and preserve copied notation`, async ({ page }, testInfo) => {
+    const text = '又こうあん_(（弘　安）)三年 字^(みぎ) 等^(外(内)) _identifier ＿下線＿ ^(未閉じ <img src=x onerror=alert(1)>';
+    const vertical = mode !== 'horizontal';
+    await fixture(page, { data: {
+      lines: [{ order: 1, text, direction: vertical ? 'vertical' : 'horizontal' }],
+      transcription: text, writing_direction: vertical ? 'vertical' : 'horizontal', reading_direction: mode === 'rtl' ? 'rtl' : 'ltr',
+    } });
+    const line = page.locator('.kobun-reading__transcription p');
+    await expect(line).toHaveText(text);
+    await expect(line.locator('.kobun-reading__ruby-marker')).toHaveCount(3);
+    await expect(line.getByRole('img', { name: '右ルビ', exact: true })).toHaveCount(2);
+    await expect(line.getByRole('img', { name: '左ルビ', exact: true })).toHaveCount(1);
+    await expect(line.locator('img')).toHaveCount(0);
+    await expect(page.locator('.kobun-reading__notation')).toBeVisible();
+    const copied = await line.evaluate(element => {
+      const range = document.createRange(); range.selectNodeContents(element);
+      const selection = window.getSelection()!; selection.removeAllRanges(); selection.addRange(range);
+      const text = selection.toString(); selection.removeAllRanges(); return text;
+    });
+    expect(copied).toBe(text);
+    const bars = await line.locator('.kobun-reading__ruby-marker').evaluateAll(elements => elements.map(element => {
+      const style = getComputedStyle(element, '::after');
+      return { width: style.width, height: style.height, left: style.left, right: style.right,
+        top: style.top, bottom: style.bottom, borderTop: style.borderTopWidth, borderLeft: style.borderLeftWidth };
+    }));
+    expect(bars[0].width).toBe(bars[1].width);
+    expect(bars[0].height).toBe(bars[1].height);
+    expect(bars[0].borderTop).toBe(bars[1].borderTop);
+    expect(bars[0].borderLeft).toBe(bars[1].borderLeft);
+    expect(vertical ? bars[0].left : bars[0].top).not.toBe(vertical ? bars[1].left : bars[1].top);
+    await page.screenshot({ path: testInfo.outputPath(`ruby-bars-${mode}.png`) });
+  });
 }
 
 test('dragged position and left-corner size survive closing, another page, and reload', async ({ page }) => {

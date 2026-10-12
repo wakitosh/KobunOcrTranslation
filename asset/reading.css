@@ -394,6 +394,10 @@
   display: none;
 }
 
+.kobun-reading__transcription {
+  text-align: start;
+}
+
 .kobun-reading__transcription p {
   margin: .25em 0;
   line-height: 1.9;
@@ -435,6 +439,61 @@
   flex: 0 0 12rem;
   writing-mode: horizontal-tb;
   white-space: normal;
+}
+
+.kobun-reading__ruby-marker {
+  display: inline-block;
+  position: relative;
+  width: 1em;
+  height: 1em;
+  line-height: 1;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.kobun-reading__ruby-source {
+  /* Preserve the ^ / _ notation when selecting and copying the text. */
+  opacity: 0;
+}
+
+.kobun-reading__ruby-marker::after {
+  content: '';
+  position: absolute;
+  width: .55em;
+  height: 0;
+  border-top: .08em solid currentColor;
+  left: .225em;
+  top: .18em;
+}
+
+.kobun-reading__ruby-marker.is-left::after {
+  top: auto;
+  bottom: .18em;
+}
+
+.kobun-reading__transcription p.is-vertical .kobun-reading__ruby-marker::after {
+  width: 0;
+  height: .55em;
+  border-top: 0;
+  border-left: .08em solid currentColor;
+  top: .225em;
+  bottom: auto;
+  left: auto;
+  right: .18em;
+}
+
+.kobun-reading__transcription p.is-vertical .kobun-reading__ruby-marker.is-left::after {
+  left: .18em;
+  right: auto;
+}
+
+.kobun-reading__notation {
+  margin: .75rem 0 0;
+  font-size: .8rem;
+  font-weight: 400;
+  line-height: 1.6;
+  color: #52645a;
+  text-align: start;
 }
 
 .kobun-reading__translation {

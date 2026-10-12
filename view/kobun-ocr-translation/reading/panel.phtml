@@ -38,6 +38,7 @@ $dialogId = 'kobun-reading-dialog-' . bin2hex(random_bytes(4));
       <div class="kobun-reading__progress" role="status" aria-live="polite" hidden><span aria-hidden="true"></span><b></b></div>
       <section class="kobun-reading__tabpanel" data-panel="transcription" role="tabpanel">
         <div class="kobun-reading__transcription"></div>
+        <p class="kobun-reading__notation" hidden>ルビの印：右ルビは右側（横書きでは上側）、左ルビは左側（横書きでは下側）です。</p>
       </section>
       <?php if ($translationEnabled): ?><section class="kobun-reading__tabpanel" data-panel="translation" role="tabpanel" hidden>
         <div class="kobun-reading__llm-settings"></div>

@@ -7,6 +7,40 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
   'use strict';
   const labels = { layout: '画像内の行を検出しています', recognize: '文字を読み取っています', ocr: '翻刻を再生成しています', translate: '現代語訳を作っています' };
 
+  const appendTranscription = (paragraph, text) => {
+    // Decorate complete plain-text ruby annotations; keep the original text
+    // selectable and use text nodes throughout, including the annotation itself.
+    const closes = new Map(), opens = [];
+    for (let index = 0; index < text.length; index++) {
+      if (text[index] === '(') opens.push(index);
+      else if (text[index] === ')' && opens.length) closes.set(opens.pop(), index);
+    }
+    const prefix = /([\^_])\(/g;
+    let match, cursor = 0, count = 0;
+    while ((match = prefix.exec(text))) {
+      const end = closes.get(match.index + 1);
+      if (end === undefined) continue;
+      paragraph.append(document.createTextNode(text.slice(cursor, match.index)));
+      const marker = document.createElement('span');
+      const side = match[1] === '^' ? 'right' : 'left';
+      marker.className = `kobun-reading__ruby-marker is-${side}`;
+      marker.setAttribute('role', 'img');
+      marker.setAttribute('aria-label', side === 'right' ? '右ルビ' : '左ルビ');
+      marker.title = side === 'right' ? '右ルビ（横書きでは上側）' : '左ルビ（横書きでは下側）';
+      const source = document.createElement('span');
+      source.className = 'kobun-reading__ruby-source';
+      source.setAttribute('aria-hidden', 'true');
+      source.textContent = match[1];
+      marker.append(source);
+      paragraph.append(marker);
+      cursor = match.index + 1;
+      prefix.lastIndex = end + 1;
+      count++;
+    }
+    paragraph.append(document.createTextNode(text.slice(cursor)));
+    return count;
+  };
+
   const canvasId = canvas => String(canvas?.id || canvas?.['@id'] || '');
   const serviceId = canvas => {
     const body = canvas?.items?.[0]?.items?.[0]?.body || canvas?.images?.[0]?.resource || {};
@@ -41,6 +75,12 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
     const startButton = get('start'), message = get('message');
     const startLabel = startButton.textContent;
     const dialog = get('dialog'), quality = get('quality'), transcription = get('transcription');
+    const notation = get('notation');
+    const clearTranscription = (text = '') => {
+      transcription.className = 'kobun-reading__transcription';
+      transcription.textContent = text;
+      if (notation) notation.hidden = true;
+    };
     const translation = get('translation'), translationEmpty = get('translation-empty');
     const translationEmptyMessage = get('translation-empty-message');
     const warnings = get('warnings'), translateButton = get('translate'), state = get('state');
@@ -160,7 +200,7 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
       if (retention) { retention.hidden = true; retention.textContent = ''; }
       if (model) { model.hidden = true; model.textContent = ''; }
       if (translation) { translation.hidden = true; translation.textContent = ''; warnings.replaceChildren(); }
-      transcription.replaceChildren();
+      clearTranscription();
       responsibility.hidden = true; responsibility.textContent = '';
       attribution.hidden = true; attributionList.replaceChildren();
       message.textContent = ''; startButton.textContent = startLabel;
@@ -350,15 +390,18 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
         const writingDirection = data.writing_direction === 'vertical' ? 'vertical' : 'horizontal';
         const readingDirection = data.reading_direction === 'rtl' ? 'rtl' : 'ltr';
         transcription.className = `kobun-reading__transcription is-${writingDirection} reading-${readingDirection}`;
+        let rubyCount = 0;
         transcription.replaceChildren(...data.lines.map(line => {
           const p = document.createElement('p');
           p.className = `is-${line.direction === 'vertical' ? 'vertical' : 'horizontal'}`;
-          p.textContent = line.text || '（判読結果なし）'; return p;
+          rubyCount += appendTranscription(p, line.text || '（判読結果なし）');
+          return p;
         }));
+        if (notation) notation.hidden = rubyCount === 0;
         if (!failed || translationFailed) message.textContent = data.quality === 'published' ? '確認済みの内容を表示しました。' : '機械翻刻を表示しました。';
         openDialog();
       } else {
-        transcription.textContent = '機械翻刻は保存されていません。';
+        clearTranscription('機械翻刻は保存されていません。');
         if (!failed) message.textContent = 'このページの機械翻刻は保存されていません。翻刻ボタンから再生成できます。';
       }
       if (translationEnabled) {
@@ -508,7 +551,7 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
         headers: { 'Content-Type': 'application/json', 'X-Kobun-CSRF': root.dataset.csrf, 'X-Kobun-Reading': root.dataset.reading },
         body: JSON.stringify({ target: 'all' }) }).catch(() => {});
       localTranslationId = null; localResultId = null;
-      stop(); current = null; privateTranslation = null; transcription.textContent = '';
+      stop(); current = null; privateTranslation = null; clearTranscription();
     });
     window.addEventListener('pageshow', event => { if (event.persisted) resetResult(); });
     window.addEventListener('beforeunload', () => { if (unsubscribe) unsubscribe(); });
