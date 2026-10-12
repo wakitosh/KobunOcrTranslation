@@ -71,9 +71,11 @@ export function llmState(policy?: LlmPolicy) {
     && provider === config.provider && storage === config.storage;
   const model = provider === 'local' ? '' : !policy.form_enabled || !policy.model_choice ? policy.models[provider] || ''
     : (provider === config.provider ? config.model : '') || policy.models[provider] || '';
-  return { provider, storage, model, hasKey: compatible && !!secret,
+  return {
+    provider, storage, model, hasKey: compatible && !!secret,
     locked: compatible && provider !== 'local' && storage === 'encrypted' && !secret && !!stored?.sealed,
-    restricted: !!(stored || secret) && !compatible };
+    restricted: !!(stored || secret) && !compatible
+  };
 }
 export const subscribeLlm = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
 const encode = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
@@ -169,14 +171,18 @@ async function providerRequest(auth: ReturnType<typeof credentials>, path: strin
   });
   if (auth.provider === 'google') headers['x-goog-api-key'] = auth.key;
   try {
-    const response = await fetch(apiHosts[auth.provider] + path, { method: body ? 'POST' : 'GET', mode: 'cors',
+    const response = await fetch(apiHosts[auth.provider] + path, {
+      method: body ? 'POST' : 'GET', mode: 'cors',
       credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store', redirect: 'error', headers,
-      body: body ? JSON.stringify(body) : undefined, signal: controller.signal });
+      body: body ? JSON.stringify(body) : undefined, signal: controller.signal
+    });
     if (!response.ok) {
       // Provider messages can echo submitted credentials or source text. Display only our own messages.
-      const errors: Record<number, string> = { 400: 'モデルIDや入力条件を確認してください。', 401: 'APIキーを確認してください。',
+      const errors: Record<number, string> = {
+        400: 'モデルIDや入力条件を確認してください。', 401: 'APIキーを確認してください。',
         403: 'APIキーの権限やサービスの利用条件を確認してください。', 404: 'このモデルを利用できません。モデルIDを確認してください。',
-        429: '利用上限・残高・処理回数をサービス側で確認してください。時間をおいて再実行できます。' };
+        429: '利用上限・残高・処理回数をサービス側で確認してください。時間をおいて再実行できます。'
+      };
       throw new Error(`${providerNames[auth.provider]}: ${errors[response.status] || 'サービス側で処理できませんでした。時間をおいて再実行してください。'} (HTTP ${response.status})`);
     }
     try { return await response.json(); }
@@ -240,8 +246,10 @@ export async function translateCommercial(source: string, signal?: AbortSignal, 
   const warnings = ['商用LLMによる機械生成・未確認の訳です。画像と翻刻本文に照らして確認してください。'];
   if (/［判読困難］|［解釈未確定］/.test(text)) warnings.push('読みや解釈が確定していない箇所があります。');
   if (source.length >= 100 && text.length < source.length * .4) warnings.push('入力に比べて訳が短いため、内容の省略がないか確認してください。');
-  return { text, model: typeof data.model === 'string' ? data.model : typeof data.modelVersion === 'string' ? data.modelVersion : auth.model,
-    provider: auth.provider, method: 'commercial', prompt_revision: commercialPromptRevision, warnings, input: source };
+  return {
+    text, model: typeof data.model === 'string' ? data.model : typeof data.modelVersion === 'string' ? data.modelVersion : auth.model,
+    provider: auth.provider, method: 'commercial', prompt_revision: commercialPromptRevision, warnings, input: source
+  };
 }
 
 let instance = 0;
@@ -315,7 +323,7 @@ export function mountLlmSettings(host: HTMLElement, policy?: LlmPolicy) {
     radios.forEach(radio => { radio.checked = radio.value === state.storage; });
     key.value = ''; passphrase.value = '';
     host.querySelector('[data-key-status]')!.textContent = state.locked ? '（暗号化保存・未解除）' : state.hasKey ? '（登録済み）' : '（未設定）';
-    host.querySelector('summary')!.textContent = `現代語訳の設定 · ${providerNames[state.provider]}${state.locked ? '（ロック中）' : ''}`;
+    host.querySelector('summary')!.textContent = `現代語訳の設定： ${providerNames[state.provider]}${state.locked ? '（ロック中）' : ''}`;
     if (state.restricted) status.textContent = '以前の保存設定は管理者の許可範囲外のため利用しません。許可された方法でキーを再登録するか、保存設定・キーを消去してください。';
     if (policy?.key_input === false && state.provider !== 'local' && !state.hasKey && !state.locked && !state.restricted) status.textContent = '管理者の設定でAPIキーの入力が無効です。登録済みのキーがないため利用できません。';
     visibility();
@@ -329,10 +337,12 @@ export function mountLlmSettings(host: HTMLElement, policy?: LlmPolicy) {
     }
     finally { buttons.forEach(button => { button.disabled = false; }); }
   }
-  form.addEventListener('submit', event => { event.preventDefault(); void act(async () => {
-    await saveLlm({ provider: provider.value as Provider, model: provider.value === 'local' ? '' : model.value.trim().replace(/^models\//, ''), storage: storage() }, key.value, passphrase.value, policy);
-    status.textContent = '設定を登録しました。APIキー・パスフレーズは入力欄から消去しました。';
-  }); });
+  form.addEventListener('submit', event => {
+    event.preventDefault(); void act(async () => {
+      await saveLlm({ provider: provider.value as Provider, model: provider.value === 'local' ? '' : model.value.trim().replace(/^models\//, ''), storage: storage() }, key.value, passphrase.value, policy);
+      status.textContent = '設定を登録しました。APIキー・パスフレーズは入力欄から消去しました。';
+    });
+  });
   provider.addEventListener('change', () => { key.value = ''; passphrase.value = ''; model.value = policy?.models[provider.value as Provider] || ''; host.querySelector('datalist')!.replaceChildren(); visibility(); });
   radios.forEach(radio => radio.addEventListener('change', () => { passphrase.value = ''; visibility(); }));
   host.querySelector('[data-unlock]')!.addEventListener('click', () => void act(async () => { await unlockLlm(passphrase.value, policy); status.textContent = 'このページでロックを解除しました。'; }));

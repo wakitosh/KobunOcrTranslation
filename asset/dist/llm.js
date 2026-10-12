@@ -311,7 +311,7 @@ function se(e, t) {
     const a = h(t);
     s.value = a.provider, l.value = a.model, i.forEach((u) => {
       u.checked = u.value === a.storage;
-    }), f.value = "", d.value = "", e.querySelector("[data-key-status]").textContent = a.locked ? "（暗号化保存・未解除）" : a.hasKey ? "（登録済み）" : "（未設定）", e.querySelector("summary").textContent = `現代語訳の設定 · ${k[a.provider]}${a.locked ? "（ロック中）" : ""}`, a.restricted && (v.textContent = "以前の保存設定は管理者の許可範囲外のため利用しません。許可された方法でキーを再登録するか、保存設定・キーを消去してください。"), t?.key_input === !1 && a.provider !== "local" && !a.hasKey && !a.locked && !a.restricted && (v.textContent = "管理者の設定でAPIキーの入力が無効です。登録済みのキーがないため利用できません。"), x();
+    }), f.value = "", d.value = "", e.querySelector("[data-key-status]").textContent = a.locked ? "（暗号化保存・未解除）" : a.hasKey ? "（登録済み）" : "（未設定）", e.querySelector("summary").textContent = `現代語訳の設定： ${k[a.provider]}${a.locked ? "（ロック中）" : ""}`, a.restricted && (v.textContent = "以前の保存設定は管理者の許可範囲外のため利用しません。許可された方法でキーを再登録するか、保存設定・キーを消去してください。"), t?.key_input === !1 && a.provider !== "local" && !a.hasKey && !a.locked && !a.restricted && (v.textContent = "管理者の設定でAPIキーの入力が無効です。登録済みのキーがないため利用できません。"), x();
   };
   async function A(a) {
     K.forEach((u) => {
