@@ -416,6 +416,8 @@
 .kobun-reading__transcription p.is-vertical {
   writing-mode: vertical-rl;
   text-orientation: mixed;
+  /* Horizontal proportional spacing inherited from themes shifts narrow kana sideways. */
+  font-feature-settings: normal;
   max-height: var(--kobun-reading-column-height, 24rem);
   white-space: pre-wrap;
 }
