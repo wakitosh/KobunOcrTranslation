@@ -4,7 +4,7 @@
 .kobun-app button:hover:not(:disabled) { background:#e7efe9; }
 .kobun-app button:disabled { opacity:.45; cursor:default; }
 .kobun-app button:focus-visible,.kobun-app input:focus-visible,.kobun-app textarea:focus-visible,.kobun-app select:focus-visible { outline:3px solid #8bb899; outline-offset:2px; }
-.kobun-app input,.kobun-app textarea,.kobun-app select { font:inherit; color:#20352c; border:1px solid #c3d0c6; border-radius:4px; background:#fff; padding:8px; width:auto; margin:0; }
+.kobun-app input,.kobun-app textarea,.kobun-app select { font:inherit; color:#20352c; border:1px solid #c3d0c6; border-radius:4px; background-color:#fff; padding:8px; width:auto; margin:0; }
 .kobun-app p { margin:8px 0; line-height:1.7; }
 .kobun-app h3 { font-size:14px; font-weight:650; line-height:1.7; margin:0 0 10px; }
 .kobun-app .kobun-primary { background:var(--accent); color:white; border-color:var(--accent); padding:10px 18px; font-weight:600; }

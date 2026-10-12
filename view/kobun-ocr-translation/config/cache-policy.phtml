@@ -6,7 +6,7 @@ $labels = ['ocr_ttl_hours' => '翻刻の共有キャッシュ有効時間（時�
     'private_ttl_minutes' => '共有しない結果・処理用データの保存時間（分）',
     'max_documents' => '一時保存する作業の件数上限', 'max_megabytes' => '一時保存領域の容量上限（MiB）'];
 ?>
-<fieldset id="kobun-reading-cache-policy" data-endpoint="<?= $this->escapeHtmlAttr($this->url('admin/kobun-ocr', ['action' => 'cache'])) ?>">
+<fieldset id="kobun-reading-cache-policy" class="kobun-config-controls" data-endpoint="<?= $this->escapeHtmlAttr($this->url('admin/kobun-ocr', ['action' => 'cache'])) ?>">
   <legend>閲覧支援の一時保存</legend>
   <p>全サイトの訪問者向け結果に適用します。図書館の編集・確認・公開用データには適用しません。期限付き共有は、実行要求に応じて処理結果を再利用するための保存です。</p>
   <?php foreach (['ocr_mode' => '機械翻刻の共有方法', 'translation_mode' => '機械現代語訳の共有方法'] as $name => $label): ?>

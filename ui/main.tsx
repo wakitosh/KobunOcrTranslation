@@ -13,6 +13,7 @@ import './workspace.css';
 import './viewer.css';
 import { llmState, subscribeLlm, mountLlmSettings, providerNames, confirmCommercial, translateCommercial, type ExternalTranslation } from './llm';
 import '../asset/llm-settings.css';
+import '../asset/select-controls.css';
 
 const root = document.getElementById('kobun-workspace')!;
 const canManage = root.dataset.canManage === '1';

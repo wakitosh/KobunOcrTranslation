@@ -2,7 +2,7 @@
 use KobunOcrTranslation\VisitorLlmPolicy;
 $prefix = VisitorLlmPolicy::SETTING;
 ?>
-<fieldset id="kobun-visitor-llm-policy">
+<fieldset id="kobun-visitor-llm-policy" class="kobun-config-controls">
   <legend>訪問者の現代語訳設定</legend>
   <p>全サイトの公開画面に適用します。現代語訳全体の有効・無効は各サイトの設定で指定してください。管理者の編集画面のLLM設定には適用しません。</p>
   <?php foreach (VisitorLlmPolicy::CONTROLS as $name => $label): ?>

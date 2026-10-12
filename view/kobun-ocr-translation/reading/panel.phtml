@@ -5,7 +5,8 @@ $pageData = json_encode($pages, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES 
 $dialogId = 'kobun-reading-dialog-' . bin2hex(random_bytes(4));
 ?>
 <link rel="stylesheet" href="<?= $this->escapeHtmlAttr($this->assetUrl('reading.css', 'KobunOcrTranslation')) ?>">
-<?php if ($translationEnabled): ?><link rel="stylesheet" href="<?= $this->escapeHtmlAttr($this->assetUrl('llm-settings.css', 'KobunOcrTranslation')) ?>"><?php endif; ?>
+<?php if ($translationEnabled): ?><link rel="stylesheet" href="<?= $this->escapeHtmlAttr($this->assetUrl('llm-settings.css', 'KobunOcrTranslation')) ?>">
+<link rel="stylesheet" href="<?= $this->escapeHtmlAttr($this->assetUrl('select-controls.css', 'KobunOcrTranslation')) ?>"><?php endif; ?>
 <section class="kobun-reading"
     data-start="<?= $this->escapeHtmlAttr($this->url('kobun-ocr-reading', $route + ['action' => 'start'])) ?>"
     data-status="<?= $this->escapeHtmlAttr($this->url('kobun-ocr-reading', $route + ['action' => 'status'])) ?>"

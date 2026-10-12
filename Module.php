@@ -103,7 +103,8 @@ class Module extends AbstractModule
         $selectedModel = (string) $services->get('Omeka\Settings')->get('kobun_ocr_llm_model_profile', 'qwen35-9b-q4km');
         $catalog = json_decode((string) file_get_contents(__DIR__ . '/worker/models.json'), true);
         $models = is_array($catalog['llm'] ?? null) ? $catalog['llm'] : [];
-        $html = $renderer->partial('kobun-ocr-translation/config/visitor-policy', [
+        $html = '<link rel="stylesheet" href="' . $renderer->escapeHtmlAttr($renderer->assetUrl('select-controls.css', 'KobunOcrTranslation')) . '">';
+        $html .= $renderer->partial('kobun-ocr-translation/config/visitor-policy', [
             'policy' => VisitorLlmPolicy::load($services->get('Omeka\Settings')),
         ]);
         $modelOptions = '';
@@ -117,7 +118,7 @@ class Module extends AbstractModule
                 . ': <code>python3 modules/KobunOcrTranslation/worker/assets.py fetch --runtime /path/to/private/runtime --model '
                 . $renderer->escapeHtml($id) . '</code></li>';
         }
-        $html .= '<fieldset><legend>翻刻を修正できる役割と資料範囲</legend>'
+        $html .= '<fieldset class="kobun-config-controls"><legend>翻刻を修正できる役割と資料範囲</legend>'
             . '<p>グローバル管理者とサイト管理者は常に全資料を扱えます。追加する役割ごとに、Omekaでその利用者が所有する資料だけを許可するか、閲覧できる全資料を許可するかを選びます。</p>';
         foreach ($acl->getRoleLabels(true) as $role => $label) {
             if (in_array($role, ['global_admin', 'site_admin'], true)) {
