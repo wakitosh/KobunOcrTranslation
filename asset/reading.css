@@ -441,6 +441,20 @@
   white-space: normal;
 }
 
+.kobun-reading__headnote-label {
+  display: inline-block;
+  /* Themes commonly shift all sup elements upward with position/top. */
+  position: static;
+  font-size: .65em;
+  line-height: 1;
+  vertical-align: super;
+}
+
+.kobun-reading__transcription p.is-vertical .kobun-reading__headnote-label {
+  vertical-align: baseline;
+  transform: translateX(.375em);
+}
+
 .kobun-reading__ruby-marker {
   display: inline-block;
   position: relative;

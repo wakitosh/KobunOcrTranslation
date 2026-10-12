@@ -8,9 +8,8 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
   const labels = { layout: '画像内の行を検出しています', recognize: '文字を読み取っています', ocr: '翻刻を再生成しています', translate: '現代語訳を作っています' };
 
   const appendTranscription = (paragraph, text) => {
-    // Decorate complete plain-text ruby annotations; keep the original text
-    // selectable and use text nodes throughout, including the annotation itself.
-    const closes = new Map(), opens = [];
+    // Decorate plain-text annotations without changing selectable source text.
+    const closes = new Map(), opens = [], tokens = [];
     for (let index = 0; index < text.length; index++) {
       if (text[index] === '(') opens.push(index);
       else if (text[index] === ')' && opens.length) closes.set(opens.pop(), index);
@@ -20,9 +19,24 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
     while ((match = prefix.exec(text))) {
       const end = closes.get(match.index + 1);
       if (end === undefined) continue;
-      paragraph.append(document.createTextNode(text.slice(cursor, match.index)));
+      tokens.push({ start: match.index, end: match.index + 1, side: match[1] === '^' ? 'right' : 'left' });
+      prefix.lastIndex = end + 1;
+    }
+    for (const note of text.matchAll(/〈頭注(?=[^〈〉]*〉)/g)) {
+      tokens.push({ start: note.index + 1, end: note.index + 3, headnote: true });
+    }
+    for (const token of tokens.sort((a, b) => a.start - b.start)) {
+      paragraph.append(document.createTextNode(text.slice(cursor, token.start)));
+      if (token.headnote) {
+        const label = document.createElement('sup');
+        label.className = 'kobun-reading__headnote-label';
+        label.textContent = '頭注';
+        paragraph.append(label);
+        cursor = token.end;
+        continue;
+      }
       const marker = document.createElement('span');
-      const side = match[1] === '^' ? 'right' : 'left';
+      const side = token.side;
       marker.className = `kobun-reading__ruby-marker is-${side}`;
       marker.setAttribute('role', 'img');
       marker.setAttribute('aria-label', side === 'right' ? '右ルビ' : '左ルビ');
@@ -30,11 +44,10 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
       const source = document.createElement('span');
       source.className = 'kobun-reading__ruby-source';
       source.setAttribute('aria-hidden', 'true');
-      source.textContent = match[1];
+      source.textContent = text.slice(token.start, token.end);
       marker.append(source);
       paragraph.append(marker);
-      cursor = match.index + 1;
-      prefix.lastIndex = end + 1;
+      cursor = token.end;
     }
     paragraph.append(document.createTextNode(text.slice(cursor)));
   };
