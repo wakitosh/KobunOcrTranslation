@@ -8,6 +8,7 @@ use Laminas\Validator\Csrf;
 use Laminas\View\Model\ViewModel;
 use Laminas\Mvc\Controller\AbstractActionController;
 use KobunOcrTranslation\ReadingCachePolicy;
+use KobunOcrTranslation\ExecutionPolicy;
 
 /** Omeka-authenticated adapter: Omeka owns authorization and resolves image sources. */
 class WorkspaceController extends AbstractActionController
@@ -92,6 +93,14 @@ class WorkspaceController extends AbstractActionController
                 throw new \RuntimeException('認証トークンを読み込めません。');
             }
             $body = null;
+            // Synchronize while the worker is running, including before a LLM
+            // restart. A stopped worker must still be startable from this page.
+            try {
+                ExecutionPolicy::synchronize($options, ExecutionPolicy::load(
+                    $this->getEvent()->getApplication()->getServiceManager()->get('Omeka\Settings')));
+            } catch (\Throwable $e) {
+                // Status below identifies a stopped or outdated worker.
+            }
             if ($method === 'POST') {
                 if (strlen($request->getContent()) > 512) {
                     throw new \InvalidArgumentException('入力が大きすぎます。');
@@ -122,6 +131,14 @@ class WorkspaceController extends AbstractActionController
             $upstream = $client->send();
             $this->getResponse()->setStatusCode($upstream->getStatusCode());
             $result = json_decode($upstream->getBody(), true, 16, JSON_THROW_ON_ERROR);
+            if ($upstream->isSuccess() && !empty($result['worker']['responding'])) {
+                try {
+                    $result['worker']['execution'] = ExecutionPolicy::synchronize($options, ExecutionPolicy::load(
+                        $this->getEvent()->getApplication()->getServiceManager()->get('Omeka\Settings')));
+                } catch (\Throwable $e) {
+                    $result['execution_error'] = '同時実行設定を反映できません。workerの更新・再起動を確認してください。';
+                }
+            }
             if ($method === 'POST' && $upstream->isSuccess() && isset($result['llama']['model_id'])) {
                 $this->getEvent()->getApplication()->getServiceManager()->get('Omeka\Settings')
                     ->set('kobun_ocr_llm_model_profile', $result['llama']['model_id']);
@@ -409,6 +426,10 @@ class WorkspaceController extends AbstractActionController
     private function upstream(string $method, string $endpoint, ?array $body = null)
     {
         $options = $this->options();
+        if (str_ends_with($endpoint, '/jobs') || $endpoint === 'health') {
+            ExecutionPolicy::synchronize($options, ExecutionPolicy::load(
+                $this->getEvent()->getApplication()->getServiceManager()->get('Omeka\Settings')));
+        }
         $token = @file_get_contents($options['token_file']);
         if (!$token) {
             throw new \RuntimeException('OCR実行部が未準備です。');
@@ -485,6 +506,10 @@ class WorkspaceController extends AbstractActionController
                 // The browser cannot submit an arbitrary image URL to the worker.
                 $body = $this->imageSource($media);
                 $body['workflow'] = 'editorial';
+            }
+            if ($method === 'POST' && str_ends_with($endpoint, '/jobs')) {
+                // Admission scopes come from trusted public adapters only.
+                unset($body['request_scope']);
             }
             if (($method === 'PUT' && preg_match('~/(transcription|translation|review)$~', $endpoint))
                 || ($method === 'DELETE' && str_ends_with($endpoint, '/translation'))) {

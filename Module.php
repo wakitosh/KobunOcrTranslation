@@ -127,6 +127,9 @@ class Module extends AbstractModule
         $html .= '<p>追加した役割は、許可範囲内の保存済み作業の閲覧・翻刻修正・履歴確認だけを行えます。資料の新規取込、レイアウト変更、OCR再実行、現代語訳の実行はできません。</p></fieldset>';
         $identity = $services->get('Omeka\AuthenticationService')->getIdentity();
         if ($identity && $identity->getRole() === 'global_admin') {
+            $html .= $renderer->partial('kobun-ocr-translation/config/execution-policy', [
+                'policy' => ExecutionPolicy::load($services->get('Omeka\Settings')),
+            ]);
             $html .= $renderer->partial('kobun-ocr-translation/config/cache-policy', [
                 'policy' => ReadingCachePolicy::load($services->get('Omeka\Settings')),
             ]);
@@ -167,6 +170,9 @@ class Module extends AbstractModule
             $identity = $services->get('Omeka\AuthenticationService')->getIdentity();
             $cachePolicy = $identity && $identity->getRole() === 'global_admin'
                 ? ReadingCachePolicy::validate($controller->params()->fromPost(ReadingCachePolicy::SETTING, [])) : null;
+            $executionPolicy = $identity && $identity->getRole() === 'global_admin'
+                ? ExecutionPolicy::validate($controller->params()->fromPost(ExecutionPolicy::SETTING,
+                    ExecutionPolicy::load($services->get('Omeka\Settings')))) : null;
         } catch (\InvalidArgumentException $e) {
             $controller->messenger()->addError($e->getMessage());
             return false;
@@ -183,6 +189,17 @@ class Module extends AbstractModule
         $services->get('Omeka\Settings')->set('kobun_ocr_transcription_roles', $roles);
         $services->get('Omeka\Settings')->set('kobun_ocr_transcription_scopes', $scopes);
         $services->get('Omeka\Settings')->set(VisitorLlmPolicy::SETTING, $policy);
+        if ($executionPolicy !== null) {
+            $services->get('Omeka\Settings')->set(ExecutionPolicy::SETTING, $executionPolicy);
+            try {
+                $status = ExecutionPolicy::synchronize($services->get('Config')['kobun_ocr'], $executionPolicy);
+                if (!empty($status['llm_restart_required'])) {
+                    $controller->messenger()->addWarning('同時実行設定を保存しました。処理完了後にLLMサーバを再起動すると、LLMの起動枠も反映されます。');
+                }
+            } catch (\Throwable $e) {
+                $controller->messenger()->addWarning('同時実行設定は保存しました。worker起動後、次の実行サービスの状態確認または処理要求で反映します。');
+            }
+        }
         if ($cachePolicy !== null) {
             $services->get('Omeka\Settings')->set(ReadingCachePolicy::SETTING, $cachePolicy);
             try {

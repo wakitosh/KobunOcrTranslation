@@ -178,6 +178,13 @@ class RetentionTest(unittest.TestCase):
         old, _ = self.private(parent)
         self.assertTrue(self.started.wait(2))
         self.store.forget_private({'scope': A, 'target': 'translation'})
+        # Disposal does not release a running inference/session slot early.
+        with self.assertRaises(Problem) as error:
+            self.private(parent)
+        self.assertEqual(error.exception.details['error_reason'], 'session_busy')
+        self.release.set()
+        with self.store._idle:
+            self.assertTrue(self.store._idle.wait_for(lambda: self.store.pending == 0, 5))
         newer, fresh = self.private(parent)
         self.assertTrue(fresh)
         self.assertNotEqual(old['id'], newer['id'])

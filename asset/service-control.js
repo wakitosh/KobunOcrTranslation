@@ -12,6 +12,15 @@
     const previous = latest;
     latest = data;
     const switching = !!data.operation;
+    const executionStatus = document.getElementById('kobun-execution-status');
+    const execution = data.worker?.execution;
+    if (executionStatus) {
+      executionStatus.textContent = data.execution_error || (execution
+        ? `実行中 ${execution.running} 件（OCR ${execution.running_ocr}・LLM ${execution.running_llm}）・待機 ${execution.waiting} 件。`
+          + (execution.llm_restart_required ? ' LLMの起動枠の変更には、処理完了後にLLMサーバの再起動が必要です。' : '')
+        : data.worker?.running ? '同時実行状態を取得できません。workerの更新を確認してください。'
+        : 'worker停止中です。起動後に設定を反映します。');
+    }
     if (modelSelect) {
       const choices = Array.isArray(data.models) ? data.models : [];
       const selected = !data.llama.running && previous?.llama.model_id === data.llama.model_id
@@ -43,7 +52,8 @@
       const words = [service.running ? '稼働中' : service.managed ? '起動待ち' : '停止中'];
       if (row.dataset.service === 'worker' && service.running) {
         words.push(service.maintenance ? '処理受付を一時停止中' : service.ocr_ready ? 'OCR準備済み' : service.responding ? 'OCR未準備' : '応答待ち');
-        if (service.pending !== null) words.push(`処理中 ${service.pending} 件`);
+        if (service.execution) words.push(`実行 ${service.execution.running} 件・待機 ${service.execution.waiting} 件`);
+        else if (service.pending !== null) words.push(`未完了 ${service.pending} 件`);
       }
       if (row.dataset.service === 'llama') {
         if (service.running) words.push(service.ready ? '応答可能' : 'モデル読込中');

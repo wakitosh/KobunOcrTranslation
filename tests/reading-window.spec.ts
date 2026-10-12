@@ -112,6 +112,8 @@ test.describe('touch reading windows', () => {
       await fixture(page, { translation: true, data: {
         lines: Array.from({ length: 8 }, (_, index) => ({ order: index + 1, text, direction: 'vertical' })),
         transcription: text.repeat(8), reading_direction: direction,
+        // Generation settings belong to a personal translation, not a saved official one.
+        translation_scope: 'private',
         transcription_metadata: { title: '古典籍翻刻の研究成果', contributors: '翻刻研究班',
           publication_url: 'https://example.org/research/' + 'a'.repeat(120), citation: '古典籍翻刻データの出典情報。'.repeat(12) },
         translation: { method: 'manual', text: '春は、夜明けのころがよい。'.repeat(20) },
@@ -195,6 +197,34 @@ test.describe('touch reading windows', () => {
     expect(safe.y + safe.height).toBeLessThanOrEqual(824);
   });
 });
+test('queued local translation shows jobs ahead in the block and popup', async ({ page }) => {
+  const data = { quality: 'machine', label: '機械生成・未確認', status: 'recognize',
+    translation_available: true, translation_scope: 'private',
+    job: { operation: 'translate', status: 'queued', jobs_ahead: 2 } };
+  await fixture(page, { translation: true, data });
+  await page.route(`${origin}/reading/status**`, route => route.fulfill({ json: {
+    id: '1234567890abcdef12345678', lines: [{ order: 1, text: '春はあけぼの。' }],
+    transcription: '春はあけぼの。', transcription_metadata: {}, ...data,
+  } }));
+  await expect(page.locator('.kobun-reading__message')).toHaveText('処理待ち（前に2件）');
+  await expect(page.locator('.kobun-reading__progress')).toHaveText('処理待ち（前に2件）');
+  await expect(page.locator('.kobun-reading__state')).toHaveText('処理待ち');
+});
+
+test('capacity and session limits explain the problem and retain retry controls', async ({ page }) => {
+  await fixture(page);
+  for (const reason of ['queue_full', 'session_busy']) {
+    const text = reason === 'queue_full' ? '現在混雑しています。少し待ってからお試しください。'
+      : 'このブラウザでは別のページを処理中、または処理待ちです。先の処理が完了してからお試しください。';
+    await page.route(`${origin}/reading/start`, route => route.fulfill({ status: 429,
+      json: { error: text, error_reason: reason } }));
+    await page.getByRole('button', { name: 'このページを翻刻する' }).click();
+    await expect(page.locator('.kobun-reading__message')).toHaveText(text);
+    await expect(page.locator('.kobun-reading__state')).toHaveText(reason === 'queue_full' ? '混雑中' : '別のページを処理中');
+    await expect(page.getByRole('button', { name: 'このページを翻刻する' })).toBeEnabled();
+  }
+});
+
 async function open(page: Page) {
   await page.getByRole('button', { name: 'このページを翻刻する' }).click();
   await expect(popup(page)).toBeVisible();

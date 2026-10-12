@@ -24325,7 +24325,7 @@ function Wm() {
         /* @__PURE__ */ R.jsx("span", { className: "kobun-spinner" }),
         yu[w.job.operation],
         " · ",
-        yu[w.job.status]
+        w.job.status === "queued" ? `処理待ち（前に${w.job.jobs_ahead || 0}件）` : yu[w.job.status]
       ] }) : yt ? "未保存の変更があります" : w ? "変更は保存されています" : "資料を開いて開始" }),
       /* @__PURE__ */ R.jsxs("div", { className: "kobun-tools", children: [
         ra > 0 && /* @__PURE__ */ R.jsx("button", { disabled: _e, onClick: () => Za(Fl[ra - 1].id), children: "戻る" }),

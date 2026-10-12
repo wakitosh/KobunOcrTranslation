@@ -155,10 +155,15 @@ class CacheTest(unittest.TestCase):
         with self.assertRaises(Problem):
             self.store.manage_cache(self.doc['id'], self.body(action='regenerate'))
         self.store.set_maintenance(False)
-        self.store.pending = 4
+        image = (self.store.directory(self.editorial['id'])/'image.jpg').read_bytes()
+        for media in range(10, 14):
+            other = self.store.create({**self.editorial['source'], 'media_id': media}, image)
+            self.store.submit(other['id'], {'operation': 'layout', 'base_revision': other['revision']})
         with self.assertRaises(Problem):
             self.store.manage_cache(self.doc['id'], self.body(action='regenerate'))
-        self.store.pending = 0
+        self.release.set()
+        with self.store._idle:
+            self.assertTrue(self.store._idle.wait_for(lambda: self.store.pending == 0, 5))
         with self.assertRaises(Problem):
             self.store.manage_cache(self.doc['id'], self.body(base_revision=self.doc['revision'] - 1))
         with self.assertRaises(Problem):

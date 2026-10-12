@@ -13,7 +13,7 @@ export interface Source {
   service_id: string; image_url: string; native_width: number; native_height: number; canvas_id: string | null;
 }
 export interface Page extends Source { position: number }
-export interface Job { id: string; operation: string; status: string; error?: string; metrics?: Record<string, unknown> }
+export interface Job { id: string; operation: string; status: string; error?: string; jobs_ahead?: number; metrics?: Record<string, unknown> }
 export interface TranscriptionMetadata {
   title?: string; contributors?: string; contributor_identifiers?: string; affiliation?: string; contribution_note?: string;
   journal_title?: string; journal_issue?: string; journal_identifiers?: string;

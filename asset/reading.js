@@ -106,6 +106,7 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
         error.retryAfter = Number(data.retry_after || 0);
         error.retryAt = Number(data.retry_at || 0);
         error.expired = response.status === 404 || response.status === 410;
+        error.busyReason = data.error_reason;
         throw error;
       }
       return data;
@@ -208,6 +209,14 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
 
     const showError = (error, translation = false) => {
       stop(); advancing = false; setProgress('');
+      if (['queue_full', 'session_busy'].includes(error.busyReason)) {
+        message.textContent = error.message;
+        setState(error.busyReason === 'session_busy' ? '別のページを処理中' : '混雑中');
+        setProgress(error.message);
+        startButton.textContent = startLabel; startButton.disabled = !selectedPage;
+        if (translateButton) translateButton.disabled = false;
+        return;
+      }
       if (error.expired) {
         localTranslationId = null;
         message.textContent = '一時的な結果は期限切れ、または削除されています。「このページを翻刻する」からもう一度実行できます。';
@@ -322,10 +331,13 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
       const translationFailed = failed && data.job.operation === 'translate';
       if (failed && !translationFailed) message.textContent = publicReadingError(data.job.error, false);
       if (active) {
-        message.textContent = `${labels[data.job.phase || data.job.operation] || '処理しています'}…`;
+        const queued = data.job.status === 'queued';
+        const ahead = Math.max(0, Number(data.job.jobs_ahead || 0));
+        message.textContent = queued ? (ahead ? `処理待ち（前に${ahead}件）` : '処理の開始を待っています…')
+          : `${labels[data.job.phase || data.job.operation] || '処理しています'}…`;
+        setState(queued ? '処理待ち' : '処理中');
         setProgress(message.textContent);
         if (data.job.operation === 'translate' && translationEnabled) {
-          setProgress('現代語訳を生成しています…');
           openDialog(); activateTab('translation');
         }
         timer = window.setTimeout(poll, 1500); return;

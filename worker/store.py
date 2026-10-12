@@ -1,4 +1,4 @@
-"""Private, versioned prototype storage; one inference subprocess at a time."""
+"""Versioned storage and a bounded, shared OCR/LLM inference scheduler."""
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
@@ -18,12 +18,14 @@ import uuid
 
 from cache_storage import CacheStorage
 from cache_policy import CACHE_WORKFLOWS, VERSION
+from execution_policy import load_policy, validate_policy as validate_execution_policy, llm_parallel
 
 
 class Problem(Exception):
-    def __init__(self, message, status=400):
+    def __init__(self, message, status=400, **details):
         super().__init__(message)
         self.status = status
+        self.details = details
 
 
 def atomic_json(file, value):
@@ -113,12 +115,18 @@ def validate_transcription_metadata(value):
 
 
 class Store(CacheStorage):
-    def __init__(self, root, config, runner=None):
+    def __init__(self, root, config, runner=None, llm_capacity=None):
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
         self.config = config
         self.lock = threading.RLock()
-        self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="kobun")
+        self.execution_policy = load_policy(self.root)
+        self.executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="kobun")
+        self._waiting = []
+        self._running = {}
+        self._llm_capacity = llm_capacity
+        self._idle = threading.Condition(self.lock)
+        self._closing = False
         self.pending = 0
         self.maintenance = False
         self.runner = runner or self.run_engine
@@ -144,7 +152,74 @@ class Store(CacheStorage):
         with self.lock:
             doc = self._check_cache(self._read_raw(ident))
             self._index_doc(doc)
+            job = doc.get('job', {})
+            job.pop('queue_position', None)
+            job.pop('jobs_ahead', None)
+            if job.get('status') == 'queued':
+                index = next((i for i, (_, queued) in enumerate(self._waiting) if queued['id'] == job['id']), None)
+                job['queue_position'] = index + 1 if index is not None else 0
+                job['jobs_ahead'] = len(self._running) + index if index is not None else 0
             return doc
+
+    @staticmethod
+    def _kind(job):
+        return 'llm' if job['operation'] == 'translate' else 'ocr'
+
+    def _llm_limit(self):
+        requested = llm_parallel(self.execution_policy)
+        return min(requested, max(1, int(self._llm_capacity()))) if self._llm_capacity else requested
+
+    def execution_status(self):
+        with self.lock:
+            actual = max(1, int(self._llm_capacity())) if self._llm_capacity else llm_parallel(self.execution_policy)
+            return {'policy': dict(self.execution_policy), 'running': len(self._running),
+                'waiting': len(self._waiting), 'pending': self.pending,
+                'running_ocr': sum(self._kind(job) == 'ocr' for _, job in self._running.values()),
+                'running_llm': sum(self._kind(job) == 'llm' for _, job in self._running.values()),
+                'effective_llm_concurrency': self._llm_limit(),
+                'llm_restart_required': actual != llm_parallel(self.execution_policy)}
+
+    def _can_start(self, job):
+        kind = self._kind(job)
+        limit = self._llm_limit() if kind == 'llm' else self.execution_policy['ocr_concurrency']
+        return len(self._running) < self.execution_policy['total_concurrency'] and sum(
+            self._kind(active) == kind for _, active in self._running.values()) < limit
+
+    def _check_admission(self, operation, request_scope=None):
+        if self.maintenance or self._closing:
+            raise Problem('実行サービスの切替中です。少し待ってから再実行してください。', 503)
+        if request_scope is not None:
+            if not isinstance(request_scope, str) or not re.fullmatch(r'[a-f0-9]{64}', request_scope):
+                raise Problem('閲覧セッションの指定が不正です。')
+            unfinished = [*self._waiting, *self._running.values()]
+            if sum(job.get('request_scope') == request_scope for _, job in unfinished) >= self.execution_policy['session_pending']:
+                raise Problem('このブラウザでは別のページを処理中、または処理待ちです。先の処理が完了してからお試しください。',
+                    429, error_reason='session_busy')
+        if len(self._waiting) >= self.execution_policy['max_waiting'] and not self._can_start({'operation': operation}):
+            raise Problem('現在混雑しています。少し待ってからお試しください。', 429, error_reason='queue_full')
+
+    def _dispatch(self):
+        # Reserve both the common slot and the operation slot before submitting.
+        # A blocked OCR/LLM class does not leave the other class's slots idle.
+        while True:
+            index = next((i for i, (_, job) in enumerate(self._waiting) if self._can_start(job)), None)
+            if index is None:
+                return
+            ident, job = self._waiting.pop(index)
+            self._running[job['id']] = (ident, job)
+            self.executor.submit(self.perform, ident, copy.deepcopy(job))
+
+    def set_execution_policy(self, value):
+        try:
+            policy = validate_execution_policy(value)
+        except ValueError as exc:
+            raise Problem(str(exc)) from exc
+        with self.lock:
+            if policy != self.execution_policy:
+                atomic_json(self.root/'execution-policy.json', policy)
+                self.execution_policy = policy
+                self._dispatch()
+            return self.execution_status()
 
     def list(self):
         with self.lock:
@@ -531,10 +606,15 @@ class Store(CacheStorage):
                 targets = [line for line in doc["lines"] if selected is None or line["id"] in selected]
                 if any("raw" not in line for line in targets) or not any(line.get("raw", "").strip() for line in targets):
                     raise Problem("未認識の行があります。先に文字認識または翻刻入力を行ってください。")
-            if self.pending >= 4:
-                raise Problem("処理待ちが上限に達しました。完了後に再実行してください。", 429)
+            request_scope = body.get('request_scope')
+            if request_scope is None and doc.get('workflow') in CACHE_WORKFLOWS:
+                scope = self.cache_scope(doc['source'])
+                request_scope = None if scope == 'shared' else scope
+            self._check_admission(operation, request_scope)
             job = {"id": uuid.uuid4().hex, "operation": operation, "status": "queued", "line_ids": selected,
                 "input_revision": doc["revision"], "accepted_at": time.time()}
+            if request_scope is not None:
+                job['request_scope'] = request_scope
             if operation == 'translate':
                 job['input_text'] = draft['text'] if draft else ''.join(line.get('raw', '') for line in targets)
                 if doc.get('workflow') == 'assist':
@@ -551,8 +631,9 @@ class Store(CacheStorage):
             else:
                 self.write(doc)
             self.pending += 1
-            self.executor.submit(self.perform, ident, copy.deepcopy(job))
-            return doc
+            self._waiting.append((ident, copy.deepcopy(job)))
+            self._dispatch()
+            return self.get(ident)
 
     def run_engine(self, payload, folder):
         atomic_json(folder/"input.json", payload)
@@ -662,10 +743,17 @@ class Store(CacheStorage):
                 self.commit(doc, "error", job.get('actor'))
         finally:
             with self.lock:
+                self._running.pop(job['id'], None)
                 self.pending -= 1
+                self._dispatch()
+                self._idle.notify_all()
                 self.cleanup_cache()
 
     def close(self):
+        with self._idle:
+            self._closing = True
+            while self.pending:
+                self._idle.wait()
         self._cache_stop.set()
         if self._cache_thread:
             self._cache_thread.join(timeout=5)

@@ -114,14 +114,24 @@ def make_handler(store, token, config):
                     ocr = all((model_dir/name).is_file()
                         for name in ['rtmdet-s-1280x1280.onnx', 'parseq-ndl-32x384-tiny-10.onnx'])
                     ocr = ocr and importlib.util.find_spec("onnxruntime") is not None
-                    self.respond(200, {"ocr_ready": ocr, "llm_ready": ready, "pending": store.pending, "max_pending": 4,
-                        "worker_concurrency": 1, "ndl_revision": config["ndl_revision"], "llm_model": config["llm_model"],
+                    execution = store.execution_status()
+                    self.respond(200, {"ocr_ready": ocr, "llm_ready": ready, "pending": execution['pending'],
+                        "max_pending": execution['policy']['total_concurrency'] + execution['policy']['max_waiting'],
+                        "worker_concurrency": execution['policy']['total_concurrency'], 'execution': execution,
+                        "ndl_revision": config["ndl_revision"], "llm_model": config["llm_model"],
                         "llm_model_id": config.get("llm_model_id", ""), 'maintenance': store.maintenance,
                         'prompt_revision': config.get('prompt_revision')})
                     return
                 if parts == ['maintenance'] and self.command == 'POST':
                     self.respond(200, store.set_maintenance(self.body().get('enabled')))
                     return
+                if parts == ['execution-policy']:
+                    if self.command == 'POST':
+                        self.respond(200, store.set_execution_policy(self.body()))
+                        return
+                    if self.command == 'GET':
+                        self.respond(200, store.execution_status())
+                        return
                 if parts == ['cache-policy']:
                     if self.command == 'POST':
                         self.respond(200, store.set_cache_policy(self.body()))
@@ -218,7 +228,7 @@ def make_handler(store, token, config):
                             return
                 raise Problem("操作が見つかりません。", 404)
             except Problem as exc:
-                self.respond(exc.status, {"error": str(exc)})
+                self.respond(exc.status, {"error": str(exc), **exc.details})
             except (ValueError, KeyError, TypeError) as exc:
                 self.respond(400, {"error": "入力の形式を確認してください。"})
             except Exception as exc:
@@ -253,9 +263,16 @@ def main():
     token = token_file.read_text().strip()
     if len(token) < 32:
         raise ValueError("実行部の認証トークンが短すぎます。")
-    store = Store(runtime/"data", config)
+    def llm_capacity():
+        try:
+            state = json.loads((runtime/'processes.json').read_text())
+            value = state.get('llama', {}).get('parallel', 1)
+            return value if type(value) is int and 1 <= value <= 4 else 1
+        except (OSError, ValueError):
+            return 1
+    store = Store(runtime/"data", config, llm_capacity=llm_capacity)
     server = ThreadingHTTPServer((args.host, args.port), make_handler(store, token, config))
-    print(f'Kobun OCR listening on {args.host}:{args.port}; one inference worker; private data: {runtime / "data"}', flush=True)
+    print(f'Kobun OCR listening on {args.host}:{args.port}; bounded inference scheduler; private data: {runtime / "data"}', flush=True)
     try:
         server.serve_forever()
     finally:

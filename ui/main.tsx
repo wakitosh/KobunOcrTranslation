@@ -761,7 +761,7 @@ function Workspace() {
         </section>}
       </div>
     </div>
-    <div className="kobun-actionbar"><div className="kobun-action-status" role="status">{commercialRunning ? <><span className="kobun-spinner" />商用LLMで現代語訳を生成中</> : active(doc) ? <><span className="kobun-spinner" />{labels[doc!.job!.operation]} · {labels[doc!.job!.status]}</> : unsaved ? '未保存の変更があります' : doc ? '変更は保存されています' : '資料を開いて開始'}</div>
+    <div className="kobun-actionbar"><div className="kobun-action-status" role="status">{commercialRunning ? <><span className="kobun-spinner" />商用LLMで現代語訳を生成中</> : active(doc) ? <><span className="kobun-spinner" />{labels[doc!.job!.operation]} · {doc!.job!.status === 'queued' ? `処理待ち（前に${doc!.job!.jobs_ahead || 0}件）` : labels[doc!.job!.status]}</> : unsaved ? '未保存の変更があります' : doc ? '変更は保存されています' : '資料を開いて開始'}</div>
       <div className="kobun-tools">{stepIndex > 0 && <button disabled={busy} onClick={() => go(steps[stepIndex - 1].id)}>戻る</button>}
         {doc && <button disabled={busy || !unsaved || (dirty && stage === 'transcription' && !canEditTranscription)
           || (dirty && stage !== 'transcription' && !canManage) || (draftDirty && !canManage)

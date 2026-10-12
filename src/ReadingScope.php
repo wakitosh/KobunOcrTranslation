@@ -25,4 +25,15 @@ final class ReadingScope
         $manager->start();
         return hash_hmac('sha256', $manager->getId() . ':' . $token, trim($secret));
     }
+
+    /** Admission identity is shared by tabs/sites; private results remain page-scoped. */
+    public static function session(string $secret): string
+    {
+        if (strlen(trim($secret)) < 32) {
+            throw new \RuntimeException('閲覧支援の接続設定を確認してください。', 503);
+        }
+        $manager = (new Container('kobun_ocr_public_scopes'))->getManager();
+        $manager->start();
+        return hash_hmac('sha256', 'admission:' . $manager->getId(), trim($secret));
+    }
 }

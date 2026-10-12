@@ -6,6 +6,13 @@ test('global administrator sees service status and authorized controls', async (
   await page.goto('/admin/module/configure?id=KobunOcrTranslation');
   const panel = page.locator('#kobun-service-control');
   await expect(panel).toBeVisible();
+  const execution = page.locator('#kobun-execution-policy');
+  await expect(execution).toBeVisible();
+  for (const [name, value] of Object.entries({ ocr_concurrency: 1, llm_concurrency: 1,
+    total_concurrency: 1, max_waiting: 3, session_pending: 1 })) {
+    await expect(execution.locator(`input[name="kobun_ocr_execution_policy[${name}]"]`)).toHaveValue(String(value));
+  }
+  await expect(page.locator('#kobun-execution-status')).toContainText('実行中 0 件');
   await expect(panel.locator('[data-service="worker"] .kobun-service-status')).toContainText('稼働中');
   await expect(panel.locator('[data-service="llama"] .kobun-service-status')).toContainText('稼働中');
   await expect(panel.locator('#kobun-service-message')).toBeEmpty();

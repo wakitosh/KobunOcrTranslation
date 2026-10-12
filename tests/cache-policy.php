@@ -4,6 +4,7 @@ declare(strict_types=1);
 // No application database, backend service, real credentials or network.
 require dirname(__DIR__, 3) . '/vendor/autoload.php';
 require __DIR__ . '/../src/ReadingCachePolicy.php';
+require __DIR__ . '/../src/ExecutionPolicy.php';
 require __DIR__ . '/../src/ReadingScope.php';
 require __DIR__ . '/../src/VisitorLlmPolicy.php';
 require __DIR__ . '/../Module.php';
@@ -45,11 +46,15 @@ $manager = (new Container('scope_test'))->getManager();
 $manager->start();
 $nonce = ReadingScope::token();
 $secret = str_repeat('s', 64);
+$sessionScope = ReadingScope::session($secret);
 $own = ReadingScope::derive($nonce, $secret);
 check(preg_match('/\A[a-f0-9]{64}\z/', $own) === 1, 'opaque worker scope');
 check(ReadingScope::derive($nonce, $secret) === $own, 'same view and browser scope');
 check(ReadingScope::derive(ReadingScope::token(), $secret) !== $own, 'separate view scope');
+check(ReadingScope::session($secret) === $sessionScope && $sessionScope !== $own,
+    'admission scope is shared by views and isolated from private-result scopes');
 $manager->regenerateId();
+check(ReadingScope::session($secret) !== $sessionScope, 'another browser session has its own admission scope');
 check(ReadingScope::derive($nonce, $secret) !== $own, 'same nonce in another session cannot read private output');
 try {
     ReadingScope::derive('invalid', $secret); check(false, 'invalid nonce accepted');
@@ -87,15 +92,21 @@ $module = new \KobunOcrTranslation\Module();
 $module->setServiceLocator($services);
 $controller = new CacheConfigController();
 $controller->posted = [\KobunOcrTranslation\VisitorLlmPolicy::SETTING => \KobunOcrTranslation\VisitorLlmPolicy::defaults(),
+    \KobunOcrTranslation\ExecutionPolicy::SETTING => array_replace(\KobunOcrTranslation\ExecutionPolicy::defaults(), ['max_waiting' => '5']),
     Policy::SETTING => array_replace($posted, ['ocr_mode' => 'private', 'private_ttl_minutes' => '15'])];
 check($module->handleConfigForm($controller), 'global administrator saves policy while worker is unavailable');
-check(Policy::load($global)['private_ttl_minutes'] === 15 && count($controller->warnings) === 1,
+check(Policy::load($global)['private_ttl_minutes'] === 15 && count($controller->warnings) === 2,
     'save persists policy and reports deferred synchronization');
+check(\KobunOcrTranslation\ExecutionPolicy::load($global)['max_waiting'] === 5,
+    'global administrator saves execution policy while worker is unavailable');
 $before = $global->values;
 $controller->posted[Policy::SETTING]['max_documents'] = '0';
 check(!$module->handleConfigForm($controller) && $global->values === $before, 'invalid limits leave every setting unchanged');
 $auth->role = 'site_admin';
+$controller->posted[\KobunOcrTranslation\ExecutionPolicy::SETTING]['total_concurrency'] = '8';
 $controller->posted[Policy::SETTING] = $posted;
 check($module->handleConfigForm($controller) && $global->values[Policy::SETTING] === $before[Policy::SETTING],
     'non-global administrator cannot forge a cache-policy update');
+check(\KobunOcrTranslation\ExecutionPolicy::load($global)['total_concurrency'] === 1,
+    'non-global administrator cannot forge an execution-policy update');
 echo "$checks checks passed\n";

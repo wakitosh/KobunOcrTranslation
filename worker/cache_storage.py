@@ -259,7 +259,7 @@ class CacheStorage:
             problem('一時保存領域が使用中です。処理が完了してからもう一度実行してください。', 429)
 
     def start_private_translation(self, ident, body):
-        if set(body) != {'scope', 'base_revision'} or body['scope'] == 'shared':
+        if set(body) - {'scope', 'base_revision', 'request_scope'} or not {'scope', 'base_revision'} <= set(body) or body['scope'] == 'shared':
             problem('閲覧セッションの指定が不正です。')
         scope = self.cache_scope({'workflow': 'assist_translation', 'cache_scope': body['scope']})
         with self.lock:
@@ -277,8 +277,8 @@ class CacheStorage:
                 child = self._read_raw(child_id)
                 if self._busy(child) and not child.get('discard_requested'):
                     return child, False
-            if self.maintenance or self.pending >= 4:
-                problem('処理待ち、または実行サービスの切替中です。少し待ってから実行してください。', 429)
+            request_scope = body.get('request_scope', scope)
+            self._check_admission('translate', request_scope)
             source = {**parent['source'], 'workflow': 'assist_translation', 'cache_scope': scope}
             self._cache_protected.add(ident)
             try:
@@ -290,7 +290,8 @@ class CacheStorage:
                 reading_direction=parent.get('reading_direction', 'auto'), status='recognize')
             self.commit(child, 'private_translation_input')
             try:
-                return self.submit(child['id'], {'operation': 'translate', 'base_revision': child['revision']}), True
+                return self.submit(child['id'], {'operation': 'translate', 'base_revision': child['revision'],
+                    'request_scope': request_scope}), True
             except Exception:
                 self._delete_cache_doc(child)
                 raise

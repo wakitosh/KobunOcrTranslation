@@ -99,13 +99,15 @@ def initialize(runtime, model_id=None, ocr_only=False, llm_backend=None):
 
 
 def llama_command(runtime, config):
+    from execution_policy import load_policy, llm_parallel
+    parallel = llm_parallel(load_policy(runtime/'data'))
     backend = config.get('llm_backend', 'cpu')
     if backend not in ('cpu', 'metal') or (backend == 'metal' and sys.platform != 'darwin'):
         raise ValueError('Choose cpu, or metal on macOS.')
     command = [str(runtime/'llama/llama-b10980/llama-server'), '--model', config['llm_model_path'],
         '--alias', config['llm_model'], '--host', '127.0.0.1', '--port', '8765',
         '--api-key-file', str(runtime/'backend-token'), '--cors-origins', 'http://localhost', '--verbosity', '4',
-        '--fit', 'off', '--parallel', '1', '--ctx-size', str(config['context_size']),
+        '--fit', 'off', '--parallel', str(parallel), '--ctx-size', str(config['context_size'] * parallel),
         '--threads', str(config['threads']), '--threads-batch', str(config['threads']), '--jinja']
     if backend == 'cpu':
         command += ['--device', 'none', '--n-gpu-layers', '0', '--no-kv-offload', '--no-op-offload']
@@ -189,6 +191,8 @@ def main():
         with (runtime/f'{name}.log').open('ab') as log:
             process = subprocess.Popen(command, stdout=log, stderr=log, stdin=subprocess.DEVNULL, start_new_session=True)
         state[name] = {'pid': process.pid, 'marker': command[0] if name == 'llama' else command[1]}
+        if name == 'llama':
+            state[name]['parallel'] = int(command[command.index('--parallel') + 1])
         pidfile.write_text(json.dumps(state, indent=2))
         time.sleep(0.3)
         if process.poll() is not None:

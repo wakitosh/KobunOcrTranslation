@@ -1,0 +1,18 @@
+<?php
+use KobunOcrTranslation\ExecutionPolicy;
+$labels = ['ocr_concurrency' => 'OCRの同時実行上限', 'llm_concurrency' => 'ローカルLLMの同時実行上限',
+    'total_concurrency' => 'OCR・ローカルLLMを合わせた同時実行上限', 'max_waiting' => '待機件数の上限',
+    'session_pending' => '同じ閲覧セッションからの未完了要求の上限'];
+?>
+<fieldset id="kobun-execution-policy">
+  <legend>OCR・ローカルLLMの同時実行</legend>
+  <p>全サイト・管理画面の処理を同じ枠で制御します。全体管理者だけが設定できます。初期値は合計1件・待機3件です。待機上限を0にすると、その場で開始できる要求だけを受け付けます。</p>
+  <?php foreach ($labels as $key => $label): [$low, $high] = ExecutionPolicy::BOUNDS[$key]; ?>
+  <div class="field"><div class="field-meta"><label for="kobun-execution-<?= $key ?>"><?= $label ?></label></div><div class="inputs">
+    <input type="number" id="kobun-execution-<?= $key ?>" name="<?= ExecutionPolicy::SETTING ?>[<?= $key ?>]" min="<?= $low ?>" max="<?= $high ?>" step="1" required value="<?= (int) $policy[$key] ?>">
+  </div></div>
+  <?php endforeach; ?>
+  <p>設定は保存後、次の処理から適用します。実行中・待機中の処理は中断しません。LLMの起動枠を変更した場合は、処理完了後に下の「実行サービス」でLLMサーバを再起動してください。並列数に応じてLLMのメモリ使用量が増えます。</p>
+  <p>閲覧セッションの上限は、同じブラウザの複数ページ・タブに共通です。保存済み結果の閲覧や、ブラウザから直接利用する商用LLMは実行枠を消費しません。</p>
+  <p id="kobun-execution-status" role="status">実行サービスの状態を確認しています…</p>
+</fieldset>

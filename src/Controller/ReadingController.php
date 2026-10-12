@@ -10,6 +10,17 @@ use Laminas\Validator\Csrf;
 use KobunOcrTranslation\VisitorLlmPolicy;
 use KobunOcrTranslation\ReadingScope;
 use KobunOcrTranslation\ReadingCachePolicy;
+use KobunOcrTranslation\ExecutionPolicy;
+
+class ExecutionBusyException extends \RuntimeException
+{
+    public string $reason;
+    public function __construct(string $message, string $reason)
+    {
+        parent::__construct($message, 429);
+        $this->reason = $reason;
+    }
+}
 
 class PublicRateLimitException extends \RuntimeException
 {
@@ -42,6 +53,18 @@ class ReadingController extends AbstractActionController
         $header = $this->getRequest()->getHeaders()->get('X-Kobun-Reading');
         return ReadingScope::derive($header ? $header->getFieldValue() : '',
             (string) @file_get_contents($this->options()['token_file']));
+    }
+
+    private function requestScope(): string
+    {
+        $this->readingScope(); // Validate the page nonce as well as the browser session.
+        return ReadingScope::session((string) @file_get_contents($this->options()['token_file']));
+    }
+
+    private function errorData(\Throwable $error, string $fallback): array
+    {
+        return ['error' => $error->getMessage() ?: $fallback]
+            + ($error instanceof ExecutionBusyException ? ['error_reason' => $error->reason] : []);
     }
     private function jsonResponse(array $data, int $status = 200)
     {
@@ -163,6 +186,7 @@ class ReadingController extends AbstractActionController
         $options = $this->options();
         if (!$this->policySynchronized) {
             ReadingCachePolicy::synchronize($options, $this->cachePolicy());
+            ExecutionPolicy::synchronize($options, ExecutionPolicy::load($this->services()->get('Omeka\Settings')));
             $this->policySynchronized = true;
         }
         $token = @file_get_contents($options['token_file']);
@@ -186,6 +210,9 @@ class ReadingController extends AbstractActionController
     {
         $data = json_decode($response->getBody(), true, 64, JSON_THROW_ON_ERROR);
         if (!$response->isSuccess()) {
+            if ($response->getStatusCode() === 429 && in_array($data['error_reason'] ?? '', ['queue_full', 'session_busy'], true)) {
+                throw new ExecutionBusyException((string) $data['error'], $data['error_reason']);
+            }
             throw new \RuntimeException((string) ($data['error'] ?? 'OCR処理を開始できません。'), $response->getStatusCode());
         }
         return $data;
@@ -257,6 +284,7 @@ class ReadingController extends AbstractActionController
             return $this->decode($this->upstream('POST', 'documents/' . $doc['id'] . '/jobs', [
                 'operation' => $operation,
                 'base_revision' => (int) $doc['revision'],
+                'request_scope' => $this->requestScope(),
             ]));
         } catch (\Throwable $e) {
             // A rejected queue request did not consume inference capacity.
@@ -323,6 +351,7 @@ class ReadingController extends AbstractActionController
                 'status' => (string) ($jobDoc['job']['status'] ?? ''),
                 'error' => (string) ($jobDoc['job']['error'] ?? ''),
                 'phase' => (string) ($jobDoc['job']['phase'] ?? ''),
+                'jobs_ahead' => (int) ($jobDoc['job']['jobs_ahead'] ?? 0),
             ] : null,
             'lines' => $lines,
             'writing_direction' => $writingDirection,
@@ -391,7 +420,7 @@ class ReadingController extends AbstractActionController
             return $this->jsonResponse(['error' => $e->getMessage()], 400);
         } catch (\Throwable $e) {
             $status = in_array((int) $e->getCode(), [403, 404, 409, 410, 429, 503], true) ? (int) $e->getCode() : 503;
-            return $this->jsonResponse(['error' => $e->getMessage() ?: '閲覧支援を開始できません。'], $status);
+            return $this->jsonResponse($this->errorData($e, '閲覧支援を開始できません。'), $status);
         }
     }
 
@@ -489,6 +518,7 @@ class ReadingController extends AbstractActionController
                 try {
                     $response = $this->upstream('POST', 'documents/' . $doc['id'] . '/private-translation', [
                         'scope' => $scope, 'base_revision' => (int) $doc['revision'],
+                        'request_scope' => $this->requestScope(),
                     ]);
                     $personal = $this->decode($response);
                     if ($response->getStatusCode() === 200) {
@@ -526,7 +556,7 @@ class ReadingController extends AbstractActionController
             return $this->jsonResponse(['error' => $e->getMessage()], 400);
         } catch (\Throwable $e) {
             $status = in_array((int) $e->getCode(), [403, 404, 409, 410, 429, 503], true) ? (int) $e->getCode() : 503;
-            return $this->jsonResponse(['error' => $e->getMessage() ?: '処理を開始できません。'], $status);
+            return $this->jsonResponse($this->errorData($e, '処理を開始できません。'), $status);
         }
     }
 
