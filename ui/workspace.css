@@ -32,12 +32,12 @@
 .kobun-source input { width:100%; max-width:760px; }
 .kobun-layout { display:grid; grid-template-columns:145px minmax(240px,1fr) minmax(390px,420px); border-top:1px solid #d6e0d8; }
 .kobun-pages { padding:14px 10px; border-right:1px solid #d6e0d8; max-height:635px; overflow:auto; }
-.kobun-pages>button { width:100%; display:flex; gap:8px; align-items:center; margin-bottom:6px; padding:8px; text-align:left; }
+.kobun-pages>button { width:100%; display:grid; grid-template-columns:auto minmax(0,1fr); gap:4px 8px; align-items:center; margin-bottom:6px; padding:8px; text-align:left; }
 .kobun-pages>button b { color:var(--muted); min-width:20px; }
 .kobun-pages button span { overflow-wrap:anywhere; }
 .kobun-pages>button span { display:flex; flex-direction:column; gap:3px; min-width:0; }
 .kobun-pages>button span strong { font-size:11px; overflow-wrap:anywhere; }
-.kobun-pages>button span small { color:var(--muted); font-size:10px; }
+.kobun-pages>button>small { grid-column:1/-1; color:var(--muted); font-size:10px; line-height:1.5; overflow-wrap:anywhere; }
 .kobun-page-context { border:1px solid #cbd8ce; background:#fff; border-radius:5px; padding:8px; margin-bottom:14px; display:flex; flex-direction:column; gap:3px; }
 .kobun-page-context span,.kobun-page-context small { color:var(--muted); font-size:10px; overflow-wrap:anywhere; }
 .kobun-page-context strong { font-size:12px; line-height:1.5; }

@@ -47,6 +47,22 @@ const inferStage = (doc: Document): Stage => doc.publication_state === 'reviewed
 const ordered = (lines: LineBox[]) => lines.map((line, i) => ({ ...line, readingOrder: i + 1 }));
 const labels: Record<string, string> = { layout: 'レイアウト認識', recognize: '文字認識', translate: '現代語訳', queued: '処理待ち', running: '処理中', human_edit: 'レイアウトの手動修正', transcription_edit: '翻刻の修正', image_saved: '画像の保存', translation_input_edit: '翻訳用本文の編集', translation_manual: '現代語訳の入力・修正', translation_commercial: '商用LLMの現代語訳を取り込み', translation_delete: '現代語訳の削除', publication_draft: '下書きへ変更', publication_reviewed: '確認済みへ変更', publication_published: '公開', publication_metadata: '責任表示・研究成果情報の変更', interrupted: '中断', error: '処理失敗' };
 const publicationLabels = { draft: '下書き', reviewed: '確認済み', published: '公開中' } as const;
+function savedPageProgress(saved?: Document): { label: string; detail?: string } {
+  if (!saved) return { label: '未着手' };
+  // Imported research metadata alone does not mean the final review step was reached.
+  const hasText = saved.lines.length > 0 && saved.lines.every(line => line.raw !== undefined);
+  let label = saved.publication_state === 'published' ? '公開中'
+    : saved.publication_state === 'reviewed' ? '確認済み'
+    : !hasText ? 'レイアウト調整'
+    : saved.transcription_credit?.trim() || saved.review_note?.trim() ? '確認・公開'
+    : saved.translation || saved.translation_draft ? '現代語訳'
+    : '翻刻確認';
+  if (active(saved)) {
+    label = saved.job?.operation === 'translate' ? '現代語訳' : 'レイアウト調整';
+    return { label, detail: `${labels[saved.job!.operation] || '処理'}${saved.job!.status === 'queued' ? '待ち' : '中'}` };
+  }
+  return { label, ...(saved.job?.status === 'error' ? { detail: `${labels[saved.job.operation] || '処理'}に失敗` } : {}) };
+}
 type ImportSection = { label: string; lines: string[] };
 type ImportResult = { filename: string; sections: ImportSection[]; legend: string[]; notation: string[]; metadata?: TranscriptionMetadata };
 function compactMetadata(metadata: TranscriptionMetadata): TranscriptionMetadata {
@@ -151,7 +167,9 @@ function Workspace() {
   const laterKey = verticalWriting ? (effectiveReading === 'rtl' ? 'ArrowLeft' : 'ArrowRight') : 'ArrowDown';
   const earlierArrow = earlierKey === 'ArrowRight' ? '→' : earlierKey === 'ArrowLeft' ? '←' : '↑';
   const laterArrow = laterKey === 'ArrowRight' ? '→' : laterKey === 'ArrowLeft' ? '←' : '↓';
-  const materials = Array.from(documents.reduce((map, saved) => {
+  const savedPages = new Map(documents.map(saved => [saved.source.media_id, saved]));
+  if (doc) savedPages.set(doc.source.media_id, doc);
+  const materials = Array.from(Array.from(savedPages.values()).reduce((map, saved) => {
     const id = saved.source.item_id;
     const existing = map.get(id);
     if (existing) existing.count += 1;
@@ -162,6 +180,8 @@ function Workspace() {
 
   function accept(next: Document, preserveReviewMetadata = false) {
     docId.current = next.id; setDoc(next); setLines(next.lines); setDirty(false); setUndo([]); setRedo([]);
+    setDocuments(saved => saved.some(item => item.id === next.id)
+      ? saved.map(item => item.id === next.id ? next : item) : [...saved, next]);
     setReadingDirection(next.reading_direction || 'auto');
     setRegion(null); setRegionMode(false); setHistory(null); setRecordOpen(false); setDraftDirty(false);
     setManualTranslation(next.translation?.text || ''); setManualTranslationDirty(false); setTranslationEditing(false);
@@ -212,7 +232,6 @@ function Workspace() {
     setStage(!canManage || editTranscription && next.lines.length > 0 && next.lines.every(line => line.raw !== undefined)
       ? 'transcription' : inferStage(next));
     setTranslationView(next.translation ? 'result' : 'input');
-    if (!saved) setDocuments(await api<Document[]>('documents'));
   }
   async function openPage(page: Page) {
     if (busy || !mayLeave()) return;
@@ -564,8 +583,8 @@ function Workspace() {
     <div className="kobun-heading"><div className="kobun-material-picker"><label htmlFor="kobun-material">対象資料</label>
         <select id="kobun-material" value={currentItemId || ''} disabled={busy || !materials.length} onChange={e => e.target.value && void loadPages(1, e.target.value)}>
           <option value="">保存済み資料から選択</option>
-          {!!currentItemId && !materials.some(material => material.id === currentItemId) && <option value={currentItemId}>{itemTitle || doc?.source.item_title}</option>}
-          {materials.map(material => <option key={material.id} value={material.id}>{material.title} — {material.identifier || '識別子なし'}（{material.count}ページ作業済み）</option>)}
+          {!!currentItemId && !materials.some(material => material.id === currentItemId) && <option value={currentItemId}>{itemTitle || doc?.source.item_title} — {loadedIdentifier || doc?.source.item_identifier || '識別子なし'}（未着手）</option>}
+          {materials.map(material => <option key={material.id} value={material.id}>{material.title} — {material.identifier || '識別子なし'}（{material.count}ページ着手済み）</option>)}
         </select></div>
       <div className="kobun-utilities"><span className="kobun-muted">{canManage ? '管理者 · 全工程を操作可能' : canEditTranscription
         ? `翻刻修正者 · ${transcriptionScope === 'all' ? '閲覧可能な全資料' : '自分が所有する資料'}のみ` : '閲覧のみ'}</span>
@@ -595,11 +614,12 @@ function Workspace() {
         <strong>{itemTitle || '未選択'}</strong>{loadedIdentifier && <small>{loadedIdentifier}</small>}</div>
         <h3>画像ページ {pageTotal ? `(${pageTotal})` : ''}</h3>
         {!pages.length && <p className="kobun-muted">対象資料を選ぶと、その資料の画像だけがここに並びます。</p>}
-        {pages.map(page => { const saved = documents.some(item => item.source.media_id === page.media_id); return <button
+        {pages.map(page => { const saved = savedPages.get(page.media_id), progress = savedPageProgress(saved); return <button
           className={doc?.source.media_id === page.media_id ? 'is-selected' : ''} disabled={busy || (!canManage && !saved)}
           title={!canManage && !saved ? '管理者がまだ作業を作成していない画像です' : undefined}
           key={page.media_id} onClick={() => openPage(page)}>
-          <b>{page.position}</b><span><strong>{page.title}</strong><small>{saved ? '作業済み' : '未着手'}</small></span></button>; })}
+          <b>{page.position}</b><span><strong>{page.title}</strong></span><small>{progress.label}</small>
+            {progress.detail && <small role="status">{progress.detail}</small>}</button>; })}
         {pageTotal > 100 && <div className="kobun-tools"><button disabled={pageIndex <= 1 || busy} onClick={() => loadPages(pageIndex - 1)}>前</button><span>{pageIndex}</span><button disabled={pageIndex * 100 >= pageTotal || busy} onClick={() => loadPages(pageIndex + 1)}>次</button></div>}
       </aside>
       <div className="kobun-editor">
