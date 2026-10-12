@@ -7,6 +7,7 @@ require __DIR__ . '/../src/ReadingCachePolicy.php';
 require __DIR__ . '/../src/ExecutionPolicy.php';
 require __DIR__ . '/../src/ReadingScope.php';
 require __DIR__ . '/../src/VisitorLlmPolicy.php';
+require __DIR__ . '/../src/ResourcePolicy.php';
 require __DIR__ . '/../Module.php';
 
 use KobunOcrTranslation\ReadingCachePolicy as Policy;

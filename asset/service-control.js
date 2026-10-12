@@ -6,12 +6,34 @@
   const modelSelect = panel.querySelector('#kobun-ocr-llm-model');
   const modelHelp = panel.querySelector('#kobun-service-model-help');
   const refresh = panel.querySelector('#kobun-service-refresh');
+  const resourceCpu = panel.querySelector('#kobun-resource-cpu');
+  const resourceMemory = panel.querySelector('#kobun-resource-memory');
+  const resourceApply = panel.querySelector('#kobun-resource-apply');
+  let resourcesDirty = false;
   let busy = false, latest = null, timer = null;
 
   function render(data) {
     const previous = latest;
     latest = data;
     const switching = !!data.operation;
+    const resources = data.resources;
+    if (resourceApply) {
+      const host = resources?.host, applied = resources?.applied;
+      panel.querySelector('#kobun-resource-host').textContent = resources?.supported
+        ? `サーバ割当: CPU ${host.cpus} 個、メモリ ${(host.memory_total_mib / 1024).toFixed(2)} GiB。`
+          + ` 適用中: CPU ${applied.cpu_quota ?? '無制限'}%、メモリ ${applied.memory_max_mib === null ? '無制限' : (applied.memory_max_mib / 1024).toFixed(2) + ' GiB'}。`
+        : resources?.reason || '運用サービスを更新すると、サーバ資源と強制上限を確認できます。';
+      if (resources?.supported && !resourcesDirty) {
+        resourceCpu.value = applied.cpu_quota ?? resources.defaults.cpu_quota;
+        resourceMemory.value = (applied.memory_max_mib ?? resources.defaults.memory_max_mib) / 1024;
+      }
+      if (resources?.supported) {
+        resourceCpu.max = Math.min(6400, Math.floor(host.cpus * 100));
+        resourceMemory.max = Math.min(1024, Math.floor(host.memory_total_mib / 256) / 4);
+      }
+      resourceCpu.disabled = resourceMemory.disabled = busy || switching || !resources?.supported;
+      resourceApply.disabled = busy || switching || !resources?.supported || (data.worker.pending || 0) > 0;
+    }
     const executionStatus = document.getElementById('kobun-execution-status');
     const execution = data.worker?.execution;
     if (executionStatus) {
@@ -90,6 +112,10 @@
       let data;
       if (action) {
         const body = { service, action };
+        if (service === 'resources') {
+          if (!resourceCpu.reportValidity() || !resourceMemory.reportValidity()) throw new Error('CPU・メモリ上限の入力を確認してください。');
+          body.policy = { cpu_quota: Number(resourceCpu.value), memory_max_mib: Math.round(Number(resourceMemory.value) * 1024) };
+        }
         if (service === 'llama' && action === 'start' && latest?.model_switch_supported) body.model_id = modelSelect.value;
         const response = await fetch(panel.dataset.endpoint, {
           method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Kobun-CSRF': panel.dataset.csrf },
@@ -97,10 +123,12 @@
         });
         data = await response.json();
         if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+        if (service === 'resources') resourcesDirty = false;
       } else data = await fetchStatus();
       busy = false;
       render(data);
-      message.textContent = data.llama.running && !data.llama.ready ? 'モデルを読み込んでいます。準備状態は自動で更新します。'
+      message.textContent = service === 'resources' ? 'CPU・メモリ上限を適用しました。再起動後も維持します。'
+        : data.llama.running && !data.llama.ready ? 'モデルを読み込んでいます。準備状態は自動で更新します。'
         : action ? '操作が完了しました。' : '';
     } catch (error) {
       busy = false;
@@ -122,10 +150,12 @@
   }
 
   modelSelect?.addEventListener('change', () => { if (latest) render(latest); });
+  [resourceCpu, resourceMemory].forEach(input => input?.addEventListener('input', () => { resourcesDirty = true; }));
   panel.addEventListener('click', event => {
     const button = event.target.closest('button');
     if (!button || busy || button.disabled) return;
     if (button.dataset.action) request(button.closest('[data-service]').dataset.service, button.dataset.action);
+    else if (button.id === 'kobun-resource-apply') request('resources', 'apply');
     else if (button.id === 'kobun-service-refresh') request();
   });
   request();

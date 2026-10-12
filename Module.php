@@ -9,10 +9,23 @@ use Laminas\Mvc\MvcEvent;
 use Laminas\Mvc\Controller\AbstractController;
 use Laminas\Validator\Csrf;
 use Laminas\View\Renderer\PhpRenderer;
+use Laminas\ServiceManager\ServiceLocatorInterface;
 use Omeka\Module\AbstractModule;
 
 class Module extends AbstractModule
 {
+    public function install(ServiceLocatorInterface $serviceLocator)
+    {
+        require_once __DIR__ . '/src/ResourcePolicy.php';
+        ResourcePolicy::initialize($serviceLocator->get('Omeka\Settings'),
+            $serviceLocator->get('Config')['kobun_ocr'] ?? $this->getConfig()['kobun_ocr']);
+    }
+
+    public function upgrade($oldVersion, $newVersion, ServiceLocatorInterface $serviceLocator)
+    {
+        $this->install($serviceLocator);
+    }
+
     public function getConfig()
     {
         return include __DIR__ . '/config/module.config.php';
@@ -137,6 +150,9 @@ class Module extends AbstractModule
             $csrf = (new Csrf(['name' => 'kobun_ocr', 'timeout' => 3600]))->getHash();
             $html .= '<fieldset id="kobun-service-control" data-endpoint="' . $renderer->escapeHtmlAttr($endpoint)
                 . '" data-csrf="' . $renderer->escapeHtmlAttr($csrf) . '"><legend>実行サービス</legend>'
+                . $renderer->partial('kobun-ocr-translation/config/resource-policy', [
+                    'resourcePolicy' => ResourcePolicy::load($services->get('Omeka\Settings')),
+                ])
                 . '<p>全体管理者のみ操作できます。処理中のジョブがある場合、停止と再起動はできません。</p>'
                 . '<div class="kobun-service-row" data-service="worker"><strong>OCR worker</strong> <span class="kobun-service-status" role="status">確認中…</span>'
                 . '<span class="kobun-service-actions"><button type="button" data-action="start">起動</button> '
@@ -173,9 +189,21 @@ class Module extends AbstractModule
             $executionPolicy = $identity && $identity->getRole() === 'global_admin'
                 ? ExecutionPolicy::validate($controller->params()->fromPost(ExecutionPolicy::SETTING,
                     ExecutionPolicy::load($services->get('Omeka\Settings')))) : null;
+            $resources = $controller->params()->fromPost(ResourcePolicy::SETTING);
+            $resourcePolicy = $identity && $identity->getRole() === 'global_admin' && $resources !== null
+                ? ResourcePolicy::fromForm($resources) : null;
         } catch (\InvalidArgumentException $e) {
             $controller->messenger()->addError($e->getMessage());
             return false;
+        }
+        if ($resourcePolicy !== null) {
+            try {
+                ResourcePolicy::contact($services->get('Config')['kobun_ocr'], $resourcePolicy);
+            } catch (\Throwable $e) {
+                $controller->messenger()->addError($e->getMessage());
+                return false;
+            }
+            $services->get('Omeka\Settings')->set(ResourcePolicy::SETTING, $resourcePolicy);
         }
         $submitted = is_array($submitted) ? $submitted : [];
         $valid = array_diff(array_keys($acl->getRoleLabels(true)), ['global_admin', 'site_admin']);

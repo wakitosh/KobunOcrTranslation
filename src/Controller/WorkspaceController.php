@@ -10,6 +10,7 @@ use Laminas\Mvc\Controller\AbstractActionController;
 use KobunOcrTranslation\ReadingCachePolicy;
 use KobunOcrTranslation\ExecutionPolicy;
 use KobunOcrTranslation\TranscriptionAccess;
+use KobunOcrTranslation\ResourcePolicy;
 
 /** Omeka-authenticated adapter: Omeka owns authorization and resolves image sources. */
 class WorkspaceController extends AbstractActionController
@@ -94,6 +95,7 @@ class WorkspaceController extends AbstractActionController
                 throw new \RuntimeException('認証トークンを読み込めません。');
             }
             $body = null;
+            $resourceChange = false;
             // Synchronize while the worker is running, including before a LLM
             // restart. A stopped worker must still be startable from this page.
             try {
@@ -107,12 +109,18 @@ class WorkspaceController extends AbstractActionController
                     throw new \InvalidArgumentException('入力が大きすぎます。');
                 }
                 $body = json_decode($request->getContent(), true, 8, JSON_THROW_ON_ERROR);
-                if (!is_array($body) || !in_array($body['service'] ?? null, ['worker', 'llama'], true)
+                $resourceChange = is_array($body) && ($body['service'] ?? null) === 'resources';
+                if ($resourceChange) {
+                    if (($body['action'] ?? null) !== 'apply' || array_diff(array_keys($body), ['service', 'action', 'policy'])) {
+                        throw new \InvalidArgumentException('不正な資源操作です。');
+                    }
+                    $body = ResourcePolicy::validate($body['policy'] ?? null);
+                } elseif (!is_array($body) || !in_array($body['service'] ?? null, ['worker', 'llama'], true)
                     || !in_array($body['action'] ?? null, ['start', 'stop', 'restart'], true)
                     || array_diff(array_keys($body), ['service', 'action', 'model_id'])) {
                     throw new \InvalidArgumentException('不正なサービス操作です。');
                 }
-                if (array_key_exists('model_id', $body)) {
+                if (!$resourceChange && array_key_exists('model_id', $body)) {
                     $catalog = json_decode((string) file_get_contents(dirname(__DIR__, 2) . '/worker/models.json'), true);
                     if ($body['service'] !== 'llama' || $body['action'] !== 'start'
                         || !is_string($body['model_id'])
@@ -121,7 +129,7 @@ class WorkspaceController extends AbstractActionController
                     }
                 }
             }
-            $client = new Client(rtrim((string) ($options['control_url'] ?? ''), '/') . ($method === 'GET' ? '/status' : '/control'),
+            $client = new Client(rtrim((string) ($options['control_url'] ?? ''), '/') . ($method === 'GET' ? '/status' : ($resourceChange ? '/resources' : '/control')),
                 ['timeout' => 300, 'maxredirects' => 0]);
             $client->setMethod($method);
             $client->setHeaders(['Authorization' => 'Bearer ' . trim($token)]);
@@ -132,6 +140,17 @@ class WorkspaceController extends AbstractActionController
             $upstream = $client->send();
             $this->getResponse()->setStatusCode($upstream->getStatusCode());
             $result = json_decode($upstream->getBody(), true, 16, JSON_THROW_ON_ERROR);
+            if ($upstream->isSuccess()) {
+                $settings = $this->getEvent()->getApplication()->getServiceManager()->get('Omeka\Settings');
+                if ($resourceChange) {
+                    if (empty($result['resources']['supported']) || ResourcePolicy::validate($result['resources']['applied'] ?? null) !== $body) {
+                        throw new \RuntimeException('Applied resource limits differ from request');
+                    }
+                    $settings->set(ResourcePolicy::SETTING, $body);
+                } else {
+                    ResourcePolicy::observe($settings, $result);
+                }
+            }
             if ($upstream->isSuccess() && !empty($result['worker']['responding'])) {
                 try {
                     $result['worker']['execution'] = ExecutionPolicy::synchronize($options, ExecutionPolicy::load(

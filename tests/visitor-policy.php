@@ -6,6 +6,7 @@ require dirname(__DIR__, 3) . '/vendor/autoload.php';
 require __DIR__ . '/../src/VisitorLlmPolicy.php';
 require __DIR__ . '/../src/ReadingCachePolicy.php';
 require __DIR__ . '/../src/ExecutionPolicy.php';
+require __DIR__ . '/../src/ResourcePolicy.php';
 require __DIR__ . '/../Module.php';
 require __DIR__ . '/../src/Controller/ReadingController.php';
 

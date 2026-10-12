@@ -77,6 +77,20 @@ class ControlTest(unittest.TestCase):
         self.assertEqual(self.call('POST', '/control', {'service': 'worker', 'action': 'shell'})[0], 400)
         self.assertEqual(self.control.calls, [])
 
+    def test_resource_endpoint_requires_auth_and_rejects_extra_properties(self):
+        policy = {'cpu_quota': 150, 'memory_max_mib': 49152}
+        state = self.control.status('secret')
+        state['resources'] = {'supported': True, 'applied': dict(policy, cpu_quota=200)}
+        def apply(value): state['resources']['applied'] = value
+        with patch.object(self.control, 'status', return_value=state), patch('control_server.resource_limits.apply', side_effect=apply) as update:
+            self.assertEqual(self.call('POST', '/resources', policy, token='wrong')[0], 401)
+            self.assertEqual(self.call('POST', '/resources', dict(policy, unit='httpd.service'))[0], 400)
+            update.assert_not_called()
+            code, result = self.call('POST', '/resources', policy)
+            self.assertEqual(code, 200)
+            self.assertEqual(result['resources']['applied'], policy)
+            update.assert_called_once_with(policy)
+
     def test_pending_job_blocks_stop_and_restart(self):
         self.control.pending = 1
         for service in ('worker', 'llama'):

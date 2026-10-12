@@ -20,6 +20,8 @@ import tempfile
 import time
 from urllib.request import Request, urlopen
 from model_storage import filesystem, NFS_TYPES, require_nfs_models
+from resource_limits import host_resources, recommended, validate as validate_resources
+from install_resources import install as install_resource_service
 
 UNIT = 'kobun-ocr-control.service'
 MARKER = '# Managed by KobunOcrTranslation install_rhel9.py'
@@ -56,14 +58,35 @@ def arguments(argv=None):
     parser.add_argument('--image-host', type=host, action='append', required=True, help='IIIF image host; repeat if necessary')
     parser.add_argument('--resource-host', type=host, action='append', default=[], help='Archive/manifest host; repeat if necessary')
     parser.add_argument('--threads', type=int, default=2)
-    parser.add_argument('--cpu-quota', type=int, default=200, help='Percent of one CPU; 200 = two CPUs total')
+    parser.add_argument('--cpu-quota', type=int, default=None, help='Percent of one CPU; auto-detected if omitted, 200 = two CPUs total')
     parser.add_argument('--memory-max', default=None, help='Aggregate service cap, e.g. 16G; this is not a measured requirement')
     parser.add_argument('--configure-selinux', action='store_true', help='Explicitly label PHP files and enable httpd_can_network_connect')
     parser.add_argument('--apply', action='store_true', help='Perform installation; default only prints plan')
     args = parser.parse_args(argv)
-    args.memory_max = args.memory_max or {'none': '4G', MODELS[1]: '8G', MODELS[0]: '16G', 'qwen35-35b-a3b-q4km': '48G'}[args.model]
+    args.detected_resources = host_resources()
+    defaults = None
+    args.resource_origin = 'automatic'
+    # Updates inherit effective systemd limits instead of resizing a shared host.
+    old_unit = Path('/etc/systemd/system')/UNIT
+    if old_unit.is_file() and old_unit.read_text().startswith(MARKER):
+        from resource_control import snapshot
+        existing = snapshot()['applied']
+        if existing['cpu_quota'] is not None and existing['memory_max_mib'] is not None:
+            defaults = existing
+            args.resource_origin = 'existing systemd limits'
+    if defaults is None:
+        defaults = recommended(args.detected_resources, args.model)
+    args.cpu_quota = args.cpu_quota if args.cpu_quota is not None else defaults['cpu_quota']
+    memory = defaults['memory_max_mib']
+    args.memory_max = args.memory_max or (f'{memory // 1024}G' if memory % 1024 == 0 else f'{memory}M')
     if not 1 <= args.threads <= 64 or not 1 <= args.cpu_quota <= 6400 or not re.fullmatch(r'[1-9][0-9]*[MG]', args.memory_max):
         parser.error('Invalid CPU/thread/memory limit.')
+    try:
+        resource_policy = validate_resources({'cpu_quota': args.cpu_quota, 'memory_max_mib': int(args.memory_max[:-1]) * (1024 if args.memory_max[-1] == 'G' else 1)})
+        if resource_policy['cpu_quota'] > args.detected_resources['cpus'] * 100 or resource_policy['memory_max_mib'] > args.detected_resources['memory_total_mib']:
+            parser.error('CPU/memory limits exceed the server allocation.')
+    except ValueError as exc:
+        parser.error(str(exc))
     if args.service_user in ('root', args.php_user):
         parser.error('Use a dedicated non-root service user distinct from the PHP user.')
     prefix, omeka = args.prefix.absolute(), args.omeka_root.absolute()
@@ -145,6 +168,7 @@ def plan(args):
     print(f'Omeka module: {module}\nBackend code: {backend}\nPrivate runtime: {runtime}')
     print(f'Account: {args.service_user}; PHP token reader: {args.php_user}; Model: {args.model}')
     print(f'CPU cap: {args.cpu_quota}% (100% = one CPU); memory cap: {args.memory_max}; threads/build jobs: {args.threads}')
+    print(f"Detected allocation: {args.detected_resources['cpus']:g} CPUs, {args.detected_resources['memory_total_mib']/1024:.2f} GiB RAM; defaults: {args.resource_origin}.")
     if args.models_nfs:
         print(f'NFS models: {runtime}/models (must already be mounted by the operator; no mount/fstab/export changes).')
         print('The dedicated service account must already exist and have NAS read/write/traverse access with matching UID/GID.')
@@ -158,6 +182,7 @@ def plan(args):
     print('   ' + shlex.join(setup_command(args)))
     print('5. Preserve existing data/token; grant only the PHP user ACL access to token/config, outside the web tree.')
     print('6. Register and enable ONE permanent control service; do not start OCR/LLM inference automatically.')
+    print('   Also register a local socket-activated root helper, restricted to CPU/memory properties of this control service.')
     print('7. Check authenticated control status. Do not modify Omeka DB, local.config.php, web services or firewall.')
     print('On the next worker start: create the temporary cache directory/index automatically; no database service or cron is needed.')
     print('Worker 0.11+ discards old visitor caches without expiry metadata; editorial/published work and its history remain protected.')
@@ -383,6 +408,10 @@ def install(args):
     write_file(unit, unit_text(args, group))
     run(['systemd-analyze', 'verify', unit])
     run(['systemctl', 'daemon-reload'])
+    # Persistent set-property drop-ins take precedence over the base unit. Keep
+    # those in sync on updates, including explicit installer overrides.
+    run(['systemctl', 'set-property', UNIT, f'CPUQuota={args.cpu_quota}%', f'MemoryMax={args.memory_max}', 'MemorySwapMax=0'])
+    install_resource_service(backend/'worker', args.service_user)
     run(['systemctl', 'enable', '--now', UNIT])
     token = (runtime/'backend-token').read_text().strip()
     for attempt in range(10):

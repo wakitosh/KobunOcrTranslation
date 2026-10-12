@@ -20,7 +20,7 @@ GBは10進、GiBは2進。ファイル容量と実行時メモリは異なりま
 | `qwen35-9b-q4km` | Qwen3.5-9B | 6.17 GB |
 | `qwen35-35b-a3b-q4km` | Qwen3.5-35B-A3B | 22.29 GB |
 
-35B-A3Bは総パラメータ35B、推論時に約3Bを使用するMoEモデルです。重み全体を保持する必要があり、3Bのモデルと同じメモリ量では動きません。一括インストーラで35Bを選ぶ場合、初回の空き容量は40 GiB以上、サービスのメモリ上限は初期値48Gです。これは設置時の容量確認と資源上限であり、必要メモリ・速度の保証ではありません。設置先で実測してください。
+35B-A3Bは総パラメータ35B、推論時に約3Bを使用するMoEモデルです。重み全体を保持する必要があり、3Bのモデルと同じメモリ量では動きません。一括インストーラで35Bを選ぶ場合、初回の空き容量は40 GiB以上、モデル別のメモリ上限は48 GiBです。新規導入時は割当資源から控えめな初期値を自動計算し、小さいサーバではさらに低くなります。CPU・メモリの実上限はLinux/systemdの設定画面から全体管理者が変更できます。これは設置時の容量確認と資源上限であり、必要メモリ・速度の保証ではありません。設置先で実測してください。
 
 ## 同梱ソースとライセンス
 
@@ -44,7 +44,7 @@ Qwenモデルも本体とは別のライセンスです。モデルファイル�
 
 以下は構成を個別に確認したい場合の手動設置例です。一括導入と併用せず、配置・ユーザ・接続設定を揃えてください。
 
-以下はOmeka Sの配置先を `/var/www/omeka-s`、非公開の実行領域を `/var/lib/kobun-ocr-translation` とした例です。実際の配置先、PHP実行ユーザー、IIIFホストは環境に合わせて置き換えてください。workerとLLMサーバは個別の常駐サービスを登録せず、Omekaのモジュール設定画面から起動・停止します。画面から両者を起動できるよう、**運用サービスだけ**をsystemdで常駐させます。この手順はRHEL 9.7向けに作成しましたが、RHEL 9.7実機での導入・性能検証はまだ行っていません。
+以下はOmeka Sの配置先を `/var/www/omeka-s`、非公開の実行領域を `/var/lib/kobun-ocr-translation` とした例です。実際の配置先、PHP実行ユーザー、IIIFホストは環境に合わせて置き換えてください。workerとLLMサーバは個別の常駐サービスを登録せず、Omekaのモジュール設定画面から起動・停止します。画面から両者を起動できるよう、運用サービスをsystemdで常駐させます。設定画面からOSのCPU・メモリ上限も変更する場合は、root所有のバックエンドコードと資源制御ソケットを配置する[一括導入手順](INSTALL_RHEL9.md)を使用してください。以下の手動例は、ブラウザからの資源上限変更を含みません。この手順はRHEL 9.7向けに作成しましたが、RHEL 9.7実機での導入・性能検証はまだ行っていません。
 
 RHEL 9の標準Pythonは3.9ですが、Python 3.11を`python3.11`と`python3.11-pip`のパッケージで併用できます。workerはPython 3.11の仮想環境をWeb非公開の実行領域に作成し、システムの`python3`は変更しません。Red Hatも、Pythonパッケージをシステム全体へ直接pipで導入せず、仮想環境を使う方法を案内しています。[RHEL 9のPython手順](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/installing_and_using_dynamic_programming_languages/assembly_installing-and-using-python_installing-and-using-dynamic-programming-languages)
 
@@ -89,7 +89,7 @@ Omekaの`config/local.config.php`に次を設定します。両サービスを�
 
 トークンを再生成した場合はPHP側の秘密ファイルにも再コピーしてください。SELinuxでPHPからのループバック接続や秘密ファイルの読取が拒否される場合は、監査ログで拒否箇所を確認し、対象のポリシー・ファイルラベルを調整します。Webサーバーからの外向き接続には`httpd_can_network_connect`が関係する構成があります。[RHEL 9のWebサーバー説明](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/deploying_web_servers_and_reverse_proxies/setting-up-and-configuring-nginx_deploying-web-servers-and-reverse-proxies)、[SELinuxのファイルラベル説明](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/using_selinux/configuring-selinux-for-applications-and-services-with-non-standard-configurations_using-selinux)
 
-### 3. 運用サービスだけをsystemdで常駐
+### 3. 運用サービスをsystemdで常駐
 
 `/etc/systemd/system/kobun-ocr-control.service`を次の内容で作成します。運用サービスは認証付きの状態取得と起動・停止操作を受け付け、`manage.py`経由でworkerとLLMサーバを起動します。worker用の別のsystemdユニットは作成しません。
 

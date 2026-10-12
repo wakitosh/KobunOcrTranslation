@@ -876,3 +876,52 @@ for (const scenario of ['administrator', 'editor', 'new-page', 'editor-no-work',
     expect(errors).toEqual([]);
   });
 }
+
+for (const scenario of ['apply', 'memory-reduction', 'pending', 'unsupported']) {
+  test(`resource settings show enforced caps and reject unsafe changes: ${scenario}`, async ({ page }) => {
+    await serveAssets(page, execFileSync('php', ['tests/resource-fixture.php'], { encoding: 'utf8' }));
+    const state = {
+      worker: { running: true, managed: true, pending: scenario === 'pending' ? 1 : 0 },
+      llama: { running: true, managed: true, ready: true },
+      resources: { supported: scenario !== 'unsupported', reason: 'Linux/systemd環境で設定できます。',
+        host: { cpus: 64, memory_total_mib: 262144 }, applied: { cpu_quota: 200, memory_max_mib: 49152 } },
+    };
+    const requests: any[] = [];
+    await page.route(`${origin}/service`, route => {
+      if (route.request().method() === 'POST') {
+        const body = route.request().postDataJSON(); requests.push(body);
+        expect(route.request().headers()['x-kobun-csrf']).toBe('fixture');
+        expect(body.service).toBe('resources'); expect(body.action).toBe('apply');
+        if (scenario === 'memory-reduction') return route.fulfill({ status: 409, json: { error: 'メモリ上限を減らす場合は、workerとLLMサーバを停止してから変更してください。' } });
+        state.resources.applied = body.policy;
+      }
+      return route.fulfill({ json: state });
+    });
+    await page.goto(origin);
+    const cpu = page.locator('#kobun-resource-cpu'), memory = page.locator('#kobun-resource-memory');
+    const apply = page.getByRole('button', { name: 'CPU・メモリ上限を適用', exact: true });
+    if (scenario === 'unsupported') {
+      await expect(cpu).toBeDisabled(); await expect(memory).toBeDisabled(); await expect(apply).toBeDisabled();
+      await expect(page.locator('#kobun-resource-host')).toContainText('Linux/systemd');
+    } else {
+      await expect(cpu).toHaveValue('200'); await expect(memory).toHaveValue('48');
+      await expect(page.locator('#kobun-resource-host')).toContainText('適用中: CPU 200%');
+      await cpu.fill('150');
+      if (scenario === 'pending') await expect(apply).toBeDisabled();
+      else {
+        if (scenario === 'memory-reduction') await memory.fill('42');
+        await apply.click();
+        if (scenario === 'memory-reduction') {
+          await expect(page.locator('#kobun-service-message')).toContainText('停止してから変更');
+          await expect(memory).toHaveValue('42');
+          await expect(page.locator('#kobun-resource-host')).toContainText('48.00 GiB');
+        } else {
+          await expect(page.locator('#kobun-service-message')).toContainText('上限を適用しました');
+          await expect(page.locator('#kobun-resource-host')).toContainText('適用中: CPU 150%');
+        }
+        expect(requests[0].policy).toEqual({ cpu_quota: 150, memory_max_mib: (scenario === 'memory-reduction' ? 42 : 48) * 1024 });
+      }
+    }
+    expect(requests.length).toBe(scenario === 'apply' || scenario === 'memory-reduction' ? 1 : 0);
+  });
+}

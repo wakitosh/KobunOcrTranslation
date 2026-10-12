@@ -18,6 +18,7 @@ from urllib.request import Request, urlopen
 
 from assets import catalog, model_entry
 from manage import owned, write_config
+import resource_limits
 
 
 class ServiceControl:
@@ -82,7 +83,35 @@ class ServiceControl:
                 'model': config.get('llm_model', ''), 'model_id': config.get('llm_model_id', ''),
                 'backend': config.get('llm_backend', 'cpu')},
             'models': self.models(), 'model_switch_supported': True, 'operation': self.operation,
+            'resources': resource_limits.status(config.get('llm_model_id') or 'none'),
         }
+
+    def set_resources(self, policy, token):
+        policy = resource_limits.validate(policy)
+        if not self.lock.acquire(blocking=False):
+            raise RuntimeError('別のサービス操作を実行中です。完了後に操作してください。')
+        paused = False
+        self.operation = 'resources-apply'
+        try:
+            before = self.status(token)
+            resources = before.get('resources', {})
+            if not resources.get('supported'):
+                raise RuntimeError(resources.get('reason', '資源制御サービスを導入してください。'))
+            if policy == resources.get('applied'): return before
+            if (before['worker']['pending'] or 0) > 0:
+                raise RuntimeError('処理中・待機中のジョブがあります。完了後に上限を変更してください。')
+            previous_memory = resources['applied'].get('memory_max_mib') or 1048576
+            if policy['memory_max_mib'] < previous_memory and (before['worker']['running'] or before['llama']['running']):
+                raise RuntimeError('メモリ上限を減らす場合は、workerとLLMサーバを停止してから変更してください。')
+            paused = self._freeze_worker(before, token)
+            resource_limits.apply(policy)
+            return self.status(token)
+        finally:
+            try:
+                if paused: self._resume_worker(token)
+            finally:
+                self.operation = None
+                self.lock.release()
 
     def _maintenance(self, enabled, token):
         request = Request('http://127.0.0.1:8766/maintenance',
@@ -222,6 +251,13 @@ def make_handler(control: ServiceControl, token: str):
             try:
                 if self.command == 'GET' and self.path == '/status':
                     return self.respond(200, control.status(token))
+                if self.command == 'POST' and self.path == '/resources':
+                    size = int(self.headers.get('Content-Length', '0'))
+                    if size < 1 or size > 512: raise ValueError('JSON本文が不正です。')
+                    result = control.set_resources(json.loads(self.rfile.read(size)), token)
+                    result['operation'] = None
+                    if result.get('worker'): result['worker']['maintenance'] = False
+                    return self.respond(200, result)
                 if self.command == 'POST' and self.path == '/control':
                     size = int(self.headers.get('Content-Length', '0'))
                     if size < 1 or size > 512:

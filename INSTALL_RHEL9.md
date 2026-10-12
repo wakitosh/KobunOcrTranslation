@@ -59,13 +59,14 @@ sudo python3 /opt/omeka-s/modules/KobunOcrTranslation/worker/install_rhel9.py \
 | `/opt/kobun-ocr-translation/backend/worker` | root所有の実行用ソースのコピー |
 | `/opt/kobun-ocr-translation/runtime` | kobunocrのみが使う仮想環境、llama.cpp、モデル、設定、ログ、作業データ |
 | `/opt/kobun-ocr-translation/php` | root所有の接続設定とトークン。指定したPHP実行ユーザだけにACLで読取を許可 |
-| `/etc/systemd/system/kobun-ocr-control.service` | 常駐登録する唯一のユニット |
+| `/etc/systemd/system/kobun-ocr-control.service` | OCR・LLMを配下に置く運用サービス |
+| `kobun-ocr-resources.socket` / `.service` | 専用Unixソケットによる、固定サービスのCPU・メモリ上限だけを扱うroot制御 |
 
-9B構成の初期上限は`CPUQuota=200%`（1CPUを100%として2CPU相当）、`MemoryMax=16G`、swap使用なし、OCR/LLMのスレッド数2です。上限は運用サービスと、その配下のworker・LLMの合計に適用します。16Gは**負荷を抑えるための上限で、実測済みの必要メモリではありません**。上限に達すると当該処理が終了する場合があります。CPU上限を抑える分、訳の生成時間は長くなる可能性があります。[RHEL向けsystemdの資源制限](https://redhat-plumbers.github.io/systemd-rhel9/systemd.resource-control.html)
+新規導入のCPU・メモリ上限は設置先の資源から自動計算します。割当CPUの半分（最大200%）、メモリは割当容量の25%・利用可能メモリの50%・モデル別上限の最小値です。親cgroupの制限も考慮します。9BではCPU割当4個以上・メモリ割当64 GiB以上・利用可能メモリ32 GiB以上なら、`CPUQuota=200%`、`MemoryMax=16G`になります。swap使用なし、OCR/LLMのスレッド数2です。上限は運用サービスと、その配下のworker・LLMの合計に適用します。16Gは**負荷を抑えるための上限で、実測済みの必要メモリではありません**。上限に達すると当該処理が終了する場合があります。CPU上限を抑える分、訳の生成時間は長くなる可能性があります。[RHEL向けsystemdの資源制限](https://redhat-plumbers.github.io/systemd-rhel9/systemd.resource-control.html)
 
 変更する場合は初回実行時に`--threads 4 --cpu-quota 400 --memory-max 20G`等を指定できます。4Bは`--model qwen3-4b-q4km`、OCRのみは`--model none`です。OCRのみ構成ではllama.cpp・LLMモデルを取得しません。
 
-35B-A3Bは`--model qwen35-35b-a3b-q4km`を指定します。モデルだけで22.29GBあり、初回は40GiB以上の空き容量を確認します。この構成の初期メモリ上限は48Gで、CPU上限・スレッド数は9Bと同じです。共有サーバでこのメモリ上限を許容できるか確認し、実行前に設置先の負荷と必要メモリを検証してください。
+35B-A3Bは`--model qwen35-35b-a3b-q4km`を指定します。モデルだけで22.29GBあり、初回は40GiB以上の空き容量を確認します。この構成のモデル別メモリ上限は48 GiBですが、初期値は上記の資源計算でさらに抑えられる場合があります。小容量のサーバではモデルが収まらないため、モデル選択と配分を確認してください。CPU上限の計算・スレッド数は9Bと同じです。共有サーバでこのメモリ上限を許容できるか確認し、実行前に設置先の負荷と必要メモリを検証してください。
 
 ### モデルだけをNFSに置く場合
 
@@ -105,7 +106,7 @@ SQLiteをNFSに置く構成は一括インストーラでは対象外です。[S
 
 管理者による少数ページの試験から始め、処理時間・メモリ・既存公開サービスへの影響を確認してください。モデルサイズやサーバの仕様だけで、訳質や処理時間は保証されません。
 
-取得済みモデルの切替は同じ設定画面で、LLMサーバの停止 → モデル選択 → LLMサーバの起動の順に行います。workerの設定更新・復帰は自動で行い、処理中の切替は拒否します。新しいモデルの初回取得とサービスの資源上限の変更は、サーバ管理者が行います。画面でモデルを変えてもsystemdのメモリ・CPU上限は変わりません。
+取得済みモデルの切替は同じ設定画面で、LLMサーバの停止 → モデル選択 → LLMサーバの起動の順に行います。workerの設定更新・復帰は自動で行い、処理中の切替は拒否します。新しいモデルの初回取得はサーバ管理者が行います。CPU・メモリ上限は、同じ画面の「CPU・メモリ上限を適用」で全体管理者が変更できます。処理中・待機中は変更できず、メモリを減らす場合はworkerとLLMを停止する必要があります。画面でモデルを変える操作だけではsystemdの上限は変わりません。
 
 ## 運用・更新・停止
 
@@ -115,6 +116,19 @@ sudo journalctl -u kobun-ocr-control.service -n 100
 ```
 
 モジュール更新時は、処理完了後にブラウザでworkerとLLMを停止し、`sudo systemctl stop kobun-ocr-control.service`を実行します。Git checkoutで`git pull --ff-only`し、インストーラを設置時と同じ引数で再実行すると実行用コピーも更新します。画面でモデルを切り替えた場合は、`--model`に現在選択しているモデルIDを指定してください。省略すると標準の9Bを選択します。CPU・メモリ上限やホストの指定も設置環境に合わせます。常駐サービスの再起動・停止は配下のworker・LLMも停止させるため、再開時はブラウザから起動します。
+
+### 0.12.4への更新
+
+通常の更新手順で、root所有の実行用コピーと運用サービスを更新してください。インストーラは既存のsystemd上限を引き継ぎます。新たに `kobun-ocr-resources.socket` と `.service` を登録し、モジュール設定からの上限変更を可能にします。root制御の呼出元は専用サービスユーザだけで、変更対象は固定ユニットのCPU・メモリ上限とswap禁止です。任意のコマンド、ユニット、パス、環境変数は受け付けません。rootで使うPythonソースと親ディレクトリはroot所有で、グループ・他者の書込不可が必要です。
+
+実行用コードを既に更新済みの場合、モデル取得・構築を繰り返さず資源制御だけを追加できます。
+
+```sh
+sudo python3 /opt/omeka-s/modules/KobunOcrTranslation/worker/install_resources.py \
+  --backend /opt/kobun-ocr-translation/backend/worker --service-user kobunocr --apply
+```
+
+このコマンド自体は既存のOCR・LLMと資源上限を変更しません。更新済みの運用サービスを、処理完了・worker／LLM停止を確認して再起動します。Omekaのモジュール更新後、設定画面でサーバ容量・適用中の上限を確認します。バックエンドが後から準備された場合は、最初の成功した状態確認で初期値を取り込みます。
 
 ### 0.12.0への更新
 
@@ -128,6 +142,6 @@ Omekaのモジュールだけを更新せず、上記のインストーラを`--
 
 **このworker起動時に、期限情報のない旧訪問者キャッシュを削除します。** 編集・確認・公開用の作業と版履歴は保持します。旧workerに接続したままでは新しい共有方針を保証できないため、公開画面の処理は停止します。一時保存領域をバックアップから除く場合は`runtime/data/temporary/`と`runtime/data/cache-index.sqlite3`を除外対象とし、公式作業・設定・トークンは引き続き保存してください。
 
-利用を止める場合は同じ手順で処理を止め、`sudo systemctl disable --now kobun-ocr-control.service`を実行します。Omekaでモジュールを無効化します。保存データ・モデル・ユーザは削除しません。バックアップ対象は非公開の`runtime`（特に`data`、`config.json`、トークン）とします。
+利用を止める場合は同じ手順で処理を止め、`sudo systemctl disable --now kobun-ocr-control.service kobun-ocr-resources.socket`を実行します。資源制御プロセスも停止する場合は `sudo systemctl stop kobun-ocr-resources.service` を実行します。Omekaでモジュールを無効化します。保存データ・モデル・ユーザは削除しません。バックアップ対象は非公開の`runtime`（特に`data`、`config.json`、トークン）とします。
 
 SELinuxが有効な場合は、必要なポリシーをサーバ管理者が判断してください。`--configure-selinux`を明示するとPHP用ディレクトリのラベルと`httpd_can_network_connect`を設定します。このbooleanはhttpdドメイン全体に作用するため、設置環境への影響を確認してから指定してください。[Red HatのWebサーバー・SELinux手順](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/deploying_web_servers_and_reverse_proxies/setting-up-and-configuring-nginx_deploying-web-servers-and-reverse-proxies)

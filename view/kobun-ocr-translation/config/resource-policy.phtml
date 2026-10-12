@@ -1,0 +1,15 @@
+<?php use KobunOcrTranslation\ResourcePolicy; ?>
+<section id="kobun-resource-policy" class="kobun-service-model">
+  <h3>OCR・ローカルLLMのCPU・メモリ上限</h3>
+  <p>運用サービス・worker・LLMを合わせたLinux/systemdの強制上限です。全体管理者だけが変更できます。CPUの100%は1 CPU相当です。</p>
+  <p id="kobun-resource-host" role="status">サーバの資源と適用中の上限を確認しています…</p>
+  <div class="field"><div class="field-meta"><label for="kobun-resource-cpu">CPU上限（%）</label></div><div class="inputs">
+    <input id="kobun-resource-cpu" type="number" name="<?= ResourcePolicy::SETTING ?>[cpu_quota]" min="1" max="6400" step="1" value="<?= (int) ($resourcePolicy['cpu_quota'] ?? 0) ?: '' ?>" required disabled>
+  </div></div>
+  <div class="field"><div class="field-meta"><label for="kobun-resource-memory">メモリ上限（GiB）</label></div><div class="inputs">
+    <input id="kobun-resource-memory" type="number" name="<?= ResourcePolicy::SETTING ?>[memory_gib]" min="0.25" max="1024" step="0.25" value="<?= isset($resourcePolicy['memory_max_mib']) ? $resourcePolicy['memory_max_mib'] / 1024 : '' ?>" required disabled>
+  </div></div>
+  <p>新規導入時は割当CPUの半分（最大200%）、メモリは割当容量の25%・空き容量の50%・選択モデル別の上限のうち最小値を初期値にします。既存環境の上限は維持します。同時実行数は自動変更しません。</p>
+  <p>処理中・待機中は変更できません。メモリ上限を減らす場合は、下の操作でworkerとLLMサーバを停止してから変更してください。上限を適用してもスレッド数は変わらないため、CPU上限を増やすだけで高速になるとは限りません。</p>
+  <p><button type="button" id="kobun-resource-apply" disabled>CPU・メモリ上限を適用</button></p>
+</section>

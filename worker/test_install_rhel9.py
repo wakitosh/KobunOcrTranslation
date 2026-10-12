@@ -17,7 +17,8 @@ from manage import initialize, llama_command
 
 class InstallTest(unittest.TestCase):
     def args(self, *extra):
-        return installer.arguments(['--php-user', 'phpfixture', '--image-host', 'iiif.example.org', *extra])
+        with patch('install_rhel9.host_resources', return_value={'cpus': 64, 'memory_total_mib': 262144, 'memory_available_mib': 163840}):
+            return installer.arguments(['--php-user', 'phpfixture', '--image-host', 'iiif.example.org', *extra])
 
     def check_runtime(self, worker, cwd):
         # Execute the real embedded check, without running dnf, pip, model
@@ -60,7 +61,7 @@ class InstallTest(unittest.TestCase):
             self.assertIn('sqlite support unavailable', result.stderr)
 
     def test_default_is_read_only_with_limited_nine_b_model(self):
-        with patch.object(installer, 'install') as install, patch.object(installer.subprocess, 'run') as run:
+        with patch.object(installer, 'install') as install, patch.object(installer.subprocess, 'run') as run, patch('install_rhel9.host_resources', return_value={'cpus': 64, 'memory_total_mib': 262144, 'memory_available_mib': 163840}):
             with contextlib.redirect_stdout(io.StringIO()) as output:
                 installer.main(['--php-user', 'phpfixture', '--image-host', 'iiif.example.org'])
         install.assert_not_called()
@@ -92,6 +93,18 @@ class InstallTest(unittest.TestCase):
         self.assertEqual(args.memory_max, '48G')
         self.assertIn('MemoryMax=48G', installer.unit_text(args, 'kobunocr'))
         self.assertEqual(installer.setup_command(args)[-1], 'qwen35-35b-a3b-q4km')
+
+    def test_new_install_detects_small_host_but_preserves_existing_caps(self):
+        small = {'cpus': 2, 'memory_total_mib': 8192, 'memory_available_mib': 6144}
+        argv = ['--php-user','phpfixture','--image-host','iiif.example.org','--model','qwen35-35b-a3b-q4km']
+        with patch('install_rhel9.host_resources',return_value=small), patch.object(Path,'is_file',return_value=False):
+            args = installer.arguments(argv)
+            self.assertEqual((args.cpu_quota,args.memory_max,args.resource_origin),(100,'2G','automatic'))
+        with patch('install_rhel9.host_resources',return_value=dict(small, memory_available_mib=128)), patch.object(Path,'is_file',return_value=True), \
+            patch.object(Path,'read_text',return_value=installer.MARKER), \
+            patch('resource_control.snapshot',return_value={'applied':{'cpu_quota':150,'memory_max_mib':6144}}):
+            args = installer.arguments(argv)
+            self.assertEqual((args.cpu_quota,args.memory_max),(150,'6G'))
 
     def test_cpu_default_and_explicit_metal_commands_preserve_auth_and_context(self):
         config = {'llm_model_path': '/private/models/model.gguf', 'llm_model': 'fixture', 'context_size': 4096, 'threads': 4}
@@ -163,7 +176,7 @@ class InstallTest(unittest.TestCase):
             installer.preflight(args)
 
     def test_nfs_plan_does_not_mount_or_create_accounts(self):
-        with patch.object(installer, 'install') as install, patch.object(installer.subprocess, 'run') as run:
+        with patch.object(installer, 'install') as install, patch.object(installer.subprocess, 'run') as run, patch('install_rhel9.host_resources', return_value={'cpus': 64, 'memory_total_mib': 262144, 'memory_available_mib': 163840}):
             with contextlib.redirect_stdout(io.StringIO()) as output:
                 installer.main(['--php-user', 'phpfixture', '--image-host', 'iiif.example.org', '--models-nfs'])
         install.assert_not_called()

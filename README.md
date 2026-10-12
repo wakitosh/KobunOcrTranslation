@@ -53,7 +53,7 @@ RHEL 9.7では[INSTALL_RHEL9.md](INSTALL_RHEL9.md)のGitHub取得＋一括イン
 1. ディレクトリ名を `KobunOcrTranslation` としてOmeka Sの `modules/` に配置し、管理画面で有効化します。
 2. [DISTRIBUTION.md](DISTRIBUTION.md) のRHEL 9.7手順に従い、Python環境、OCR・LLMモデル、llama.cppをWeb非公開の実行領域へ準備します。
 3. `config/local.config.php` でworker・運用サービスの接続先、PHPから読めるトークンファイル、許可するIIIFホストを設定します。
-4. **運用サービスだけ**をsystemdで登録し、`sudo systemctl enable --now kobun-ocr-control.service`で起動します。workerとLLMサーバ用の常駐ユニットは不要です。
+4. 運用サービスをsystemdで登録し、`sudo systemctl enable --now kobun-ocr-control.service`で起動します。workerとLLMサーバ用の常駐ユニットは不要です。設定画面からCPU・メモリ上限を変更する場合は、[RHEL導入手順](INSTALL_RHEL9.md)に従い専用の資源制御ソケット・サービスも登録します。
 5. モジュール設定で現代語訳モデルと、翻刻を修正できる役割・資料範囲を選びます。全体管理者が同じ設定画面の「実行サービス」からworkerと、必要に応じてLLMサーバを起動します。
 
 設定例：
@@ -77,6 +77,18 @@ RHEL 9.7では[INSTALL_RHEL9.md](INSTALL_RHEL9.md)のGitHub取得＋一括イン
 ローカルLLMの候補はQwen3-4B、Qwen3.5-9B、Qwen3.5-35B-A3B（いずれもQ4_K_M）です。35B-A3Bのモデルファイルは22.29GBで、十分なメモリが必要です。CPU実行に加え、macOSではMetalによるGPU実行を明示選択できます。切替手順は[LOCAL_MACOS.md](LOCAL_MACOS.md)、配布・容量の詳細は[DISTRIBUTION.md](DISTRIBUTION.md)を参照してください。
 
 モジュール設定の「実行サービス」にはworkerとLLMサーバの稼働・準備状態、モデル名とCPU／Metal、実行中と待機中の件数を表示します。モデル読込中は状態を自動更新します。全体管理者だけが起動・停止・再起動・モデル切替できます。処理中ジョブがある間は停止・再起動・モデル切替を拒否します。workerに独立した自動起動サービスはありません。運用サービス自体が停止した場合は、RHEL 9.7では`sudo systemctl start kobun-ocr-control.service`で起動します。macOSのローカル環境では[LOCAL_MACOS.md](LOCAL_MACOS.md)を参照してください。既存の運用サービスは更新・再起動が必要です。
+
+## OCR・ローカルLLMのCPU・メモリ上限
+
+Linux/systemdのバックエンドでは、モジュール設定の「実行サービス」で全体管理者がCPU上限（%）・メモリ上限（GiB）を変更できます。「CPU・メモリ上限を適用」、または設定フォームの保存でOSへ反映し、再起動後も維持します。サーバの割当容量、適用中の上限を画面に表示し、失敗した設定を保存済みとして扱いません。100%は1 CPU相当です。
+
+新規のバックエンド導入時に、CPU数・メモリ容量・利用可能メモリと親cgroupの割当制限を自動確認します。CPUの初期上限は割当の半分（最大200%）。メモリは割当の25%・利用可能メモリの50%・モデル別上限（OCRのみ4 GiB、4Bは8 GiB、9Bは16 GiB、35B-A3Bは48 GiB）の最小値を0.25 GiB単位で切り下げます。モデルの必要メモリを保証する計算ではなく、小さいサーバでは選択モデルがこの上限に収まらない場合があります。
+
+Omekaのインストール・更新時にバックエンドの適用値を取り込みます。バックエンド未導入・未接続の場合は、最初の成功した状態確認で初期化します。PHPとバックエンドが別ホストでも、実際にOCR／LLMを動かすサーバの値を使用します。既存のsystemd上限や設定済みの同時実行数は自動変更しません。
+
+処理中・待機中は資源上限を変更できません。メモリを減らす場合はworkerとLLMを先に停止してください。CPU上限は合計CPU時間の制限であり、コアの専有ではありません。上限変更だけではスレッド数を変更しないため、CPU上限を増やしても必ず高速になるとは限りません。
+
+資源変更は専用のUnixソケットとroot所有の小さな制御プログラムを通し、対象を `kobun-ocr-control.service` のCPU・メモリ上限とswap禁止に限定します。Web/PHPやworkerに汎用sudo権限を付与しません。macOSのLaunchAgentでは同じ強制上限を設定できないため、入力欄を無効にして理由を表示します。導入・既存環境への追加は[INSTALL_RHEL9.md](INSTALL_RHEL9.md)を参照してください。[systemdの動的設定と永続化](https://redhat-plumbers.github.io/systemd-rhel9/systemctl.html)
 
 ## OCR・ローカルLLMの同時実行
 
