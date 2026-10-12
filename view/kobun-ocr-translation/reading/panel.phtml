@@ -13,6 +13,7 @@ $dialogId = 'kobun-reading-dialog-' . bin2hex(random_bytes(4));
     data-forget="<?= $this->escapeHtmlAttr($this->url('kobun-ocr-reading', $route + ['action' => 'forget'])) ?>"
     data-reading="<?= $this->escapeHtmlAttr($readingToken) ?>"
     <?php if ($cacheAdministrator ?? false): ?>data-cache="<?= $this->escapeHtmlAttr($this->url('kobun-ocr-reading', $route + ['action' => 'cache'])) ?>"<?php endif; ?>
+    <?php if ($editorUrl ?? null): ?>data-editor="<?= $this->escapeHtmlAttr($editorUrl) ?>"<?php endif; ?>
     data-csrf="<?= $this->escapeHtmlAttr($csrf) ?>" data-translation="<?= $translationEnabled ? '1' : '0' ?>"
     data-llm-policy="<?= $this->escapeHtmlAttr(json_encode($visitorLlmPolicy, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT)) ?>"
     data-pages="<?= $this->escapeHtmlAttr($pageData) ?>">
@@ -38,7 +39,7 @@ $dialogId = 'kobun-reading-dialog-' . bin2hex(random_bytes(4));
       <div class="kobun-reading__progress" role="status" aria-live="polite" hidden><span aria-hidden="true"></span><b></b></div>
       <section class="kobun-reading__tabpanel" data-panel="transcription" role="tabpanel">
         <div class="kobun-reading__transcription"></div>
-        <p class="kobun-reading__notation" hidden>ルビの印：右ルビは右側（横書きでは上側）、左ルビは左側（横書きでは下側）です。</p>
+        <?php if ($editorUrl ?? null): ?><p class="kobun-reading__editor-tools"><a class="kobun-reading__editor-link" target="_blank" rel="noopener" hidden>このページの翻刻を編集（別タブ）</a></p><?php endif; ?>
       </section>
       <?php if ($translationEnabled): ?><section class="kobun-reading__tabpanel" data-panel="translation" role="tabpanel" hidden>
         <div class="kobun-reading__llm-settings"></div>

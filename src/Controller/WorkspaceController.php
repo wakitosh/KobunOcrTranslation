@@ -9,6 +9,7 @@ use Laminas\View\Model\ViewModel;
 use Laminas\Mvc\Controller\AbstractActionController;
 use KobunOcrTranslation\ReadingCachePolicy;
 use KobunOcrTranslation\ExecutionPolicy;
+use KobunOcrTranslation\TranscriptionAccess;
 
 /** Omeka-authenticated adapter: Omeka owns authorization and resolves image sources. */
 class WorkspaceController extends AbstractActionController
@@ -155,37 +156,20 @@ class WorkspaceController extends AbstractActionController
 
     private function canEditTranscription(): bool
     {
-        if ($this->isAdministrator()) {
-            return true;
-        }
-        $identity = $this->identity();
-        $roles = (array) $this->getEvent()->getApplication()->getServiceManager()
-            ->get('Omeka\Settings')->get('kobun_ocr_transcription_roles', []);
-        return $identity && in_array($identity->getRole(), $roles, true);
+        return TranscriptionAccess::canEdit($this->getEvent()->getApplication()->getServiceManager()
+            ->get('Omeka\Settings'), $this->identity());
     }
 
     private function transcriptionScope(): string
     {
-        if ($this->isAdministrator()) {
-            return 'all';
-        }
-        $identity = $this->identity();
-        $scopes = (array) $this->getEvent()->getApplication()->getServiceManager()
-            ->get('Omeka\Settings')->get('kobun_ocr_transcription_scopes', []);
-        return $identity && ($scopes[$identity->getRole()] ?? 'owned') === 'all' ? 'all' : 'owned';
+        return TranscriptionAccess::scope($this->getEvent()->getApplication()->getServiceManager()
+            ->get('Omeka\Settings'), $this->identity());
     }
 
     private function canAccessItem($item): bool
     {
-        if (!$this->canEditTranscription()) {
-            return false;
-        }
-        if ($this->transcriptionScope() === 'all') {
-            return true;
-        }
-        $identity = $this->identity();
-        $owner = $item->owner();
-        return $identity && $owner && (int) $owner->id() === (int) $identity->getId();
+        return TranscriptionAccess::canAccessItem($this->getEvent()->getApplication()->getServiceManager()
+            ->get('Omeka\Settings'), $this->identity(), $item);
     }
 
     private function actor(): array
@@ -371,6 +355,17 @@ class WorkspaceController extends AbstractActionController
                 }
             }
             $perPage = 100;
+            $selectedMedia = $this->params()->fromQuery('media_id');
+            if ($selectedMedia !== null) {
+                if (!is_string($selectedMedia) || !ctype_digit($selectedMedia) || (int) $selectedMedia <= 0) {
+                    throw new \InvalidArgumentException('画像の指定が不正です。');
+                }
+                $index = array_search((int) $selectedMedia, array_column($allPages, 'media_id'), true);
+                if ($index === false) {
+                    throw new \InvalidArgumentException('指定画像は、この資料の閲覧可能なOCR対象画像ではありません。');
+                }
+                $page = intdiv($index, $perPage) + 1;
+            }
             $pages = array_slice($allPages, ($page - 1) * $perPage, $perPage);
             return $this->jsonResponse(['item_id' => $itemId, 'identifier' => $this->itemIdentifier($item), 'title' => (string) $item->displayTitle(),
                 'pages' => $pages, 'page' => $page, 'total' => count($allPages)]);

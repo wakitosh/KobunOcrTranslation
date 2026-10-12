@@ -9,9 +9,9 @@ const storageKey = 'kobun-reading-window-v1';
 const popup = (page: Page) => page.locator('.kobun-reading__dialog');
 const box = async (element: Locator) => (await element.boundingBox())!;
 
-async function fixture(page: Page, options: { translation?: boolean; cacheAdministrator?: boolean; data?: Record<string, unknown> } = {}) {
+async function fixture(page: Page, options: { translation?: boolean; cacheAdministrator?: boolean; editor?: boolean; data?: Record<string, unknown> } = {}) {
   const args = ['tests/reading-fixture.php', options.translation ? 'enabled' : 'disabled'];
-  if (options.cacheAdministrator) args.push('', 'global_admin');
+  args.push('', options.cacheAdministrator ? 'global_admin' : '', options.editor ? '/admin/kobun-ocr?item_id=10' : '');
   const html = execFileSync('php', args, { encoding: 'utf8' });
   await page.route('**/*', route => route.abort());
   await page.route(`${origin}/**`, route => {
@@ -252,7 +252,7 @@ for (const direction of ['rtl', 'ltr']) {
       lines: [{ order: 1, text: '春はあけぼの^(よあけ)。', direction: 'vertical' }],
     } });
     const transcription = page.locator('.kobun-reading__transcription');
-    await expect(page.locator('.kobun-reading__notation')).toBeVisible();
+    await expect(page.locator('.kobun-reading__notation')).toHaveCount(0);
     await page.route(`${origin}/reading/cache`, route => {
       expect(route.request().postDataJSON()).toMatchObject({ target: 'transcription', action: 'delete', base_revision: 1 });
       return route.fulfill({ json: {
@@ -265,7 +265,7 @@ for (const direction of ['rtl', 'ltr']) {
     await page.locator('.kobun-reading__cache summary').click();
     await page.locator('[data-cache-target="transcription"][data-cache-action="delete"]').click();
     await expect(transcription).toHaveText('機械翻刻は保存されていません。');
-    await expect(page.locator('.kobun-reading__notation')).toBeHidden();
+    await expect(page.locator('.kobun-reading__notation')).toHaveCount(0);
     const position = await transcription.evaluate(element => {
       const range = document.createRange(); range.selectNodeContents(element);
       const style = getComputedStyle(element);
@@ -293,7 +293,7 @@ for (const mode of ['rtl', 'ltr', 'horizontal']) {
     await expect(line.getByRole('img', { name: '右ルビ', exact: true })).toHaveCount(2);
     await expect(line.getByRole('img', { name: '左ルビ', exact: true })).toHaveCount(1);
     await expect(line.locator('img')).toHaveCount(0);
-    await expect(page.locator('.kobun-reading__notation')).toBeVisible();
+    await expect(page.locator('.kobun-reading__notation')).toHaveCount(0);
     const copied = await line.evaluate(element => {
       const range = document.createRange(); range.selectNodeContents(element);
       const selection = window.getSelection()!; selection.removeAllRanges(); selection.addRange(range);
@@ -310,9 +310,46 @@ for (const mode of ['rtl', 'ltr', 'horizontal']) {
     expect(bars[0].borderTop).toBe(bars[1].borderTop);
     expect(bars[0].borderLeft).toBe(bars[1].borderLeft);
     expect(vertical ? bars[0].left : bars[0].top).not.toBe(vertical ? bars[1].left : bars[1].top);
+    if (vertical) {
+      // Measure against actual Japanese glyphs, rather than just comparing the
+      // pseudo-element positions inside a potentially misaligned inline box.
+      for (const size of [16, 28]) {
+        await line.evaluate((element, size) => { element.style.fontSize = `${size}px`; }, size);
+        const offsets = await line.locator('.kobun-reading__ruby-marker').evaluateAll(elements => elements.map(marker => {
+          const range = document.createRange(), text = marker.previousSibling!;
+          range.setStart(text, text.textContent!.length - 1); range.setEnd(text, text.textContent!.length);
+          const glyph = range.getBoundingClientRect(), cell = marker.getBoundingClientRect();
+          const style = getComputedStyle(marker, '::after');
+          const bar = cell.left + parseFloat(style.left) + parseFloat(style.borderLeftWidth) / 2;
+          return (bar - (glyph.left + glyph.right) / 2) / parseFloat(getComputedStyle(marker).fontSize);
+        }));
+        expect(offsets[0]).toBeLessThan(-.2);
+        expect(offsets[1]).toBeGreaterThan(.2);
+        expect(Math.abs(offsets[0] + offsets[1])).toBeLessThan(.1);
+      }
+    }
     await page.screenshot({ path: testInfo.outputPath(`ruby-bars-${mode}.png`) });
   });
 }
+
+test('authorized edit link follows the current Mirador page, including after a page switch', async ({ page }) => {
+  await fixture(page, { editor: true });
+  const link = page.getByRole('link', { name: 'このページの翻刻を編集（別タブ）' });
+  await expect(link).toHaveAttribute('href', `${origin}/admin/kobun-ocr?item_id=10&media_id=1`);
+  await expect(link).toHaveAttribute('target', '_blank');
+  await page.evaluate(() => {
+    (window as any).fixtureCanvas = 'c2';
+    (window as any).fixtureListeners.forEach((listener: () => void) => listener());
+  });
+  await open(page);
+  await expect(link).toHaveAttribute('href', `${origin}/admin/kobun-ocr?item_id=10&media_id=2`);
+});
+
+test('public popup omits the edit link when the server grants no editing access', async ({ page }) => {
+  await fixture(page);
+  await expect(page.locator('.kobun-reading__editor-link')).toHaveCount(0);
+  await expect(page.locator('.kobun-reading')).not.toHaveAttribute('data-editor');
+});
 
 test('dragged position and left-corner size survive closing, another page, and reload', async ({ page }) => {
   await fixture(page);

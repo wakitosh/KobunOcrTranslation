@@ -482,18 +482,39 @@
   right: .18em;
 }
 
+.kobun-reading__transcription p.is-vertical .kobun-reading__ruby-marker {
+  /* Use the vertical central baseline; `middle` shifts the box by the Latin
+     x-height and places the left bar near the centre of the Japanese column. */
+  vertical-align: baseline;
+}
+
 .kobun-reading__transcription p.is-vertical .kobun-reading__ruby-marker.is-left::after {
   left: .18em;
   right: auto;
 }
 
-.kobun-reading__notation {
+.kobun-reading__editor-tools {
   margin: .75rem 0 0;
   font-size: .8rem;
   font-weight: 400;
   line-height: 1.6;
   color: #52645a;
   text-align: start;
+}
+
+.kobun-reading__editor-link {
+  display: inline-block;
+  padding: .45rem .7rem;
+  border: 1px solid #587360;
+  border-radius: .35rem;
+  color: #284b35;
+  background: #f2f7f3;
+  text-decoration: none;
+}
+
+.kobun-reading__editor-link:hover {
+  background: #e2eee5;
+  text-decoration: underline;
 }
 
 .kobun-reading__translation {

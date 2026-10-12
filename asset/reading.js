@@ -16,7 +16,7 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
       else if (text[index] === ')' && opens.length) closes.set(opens.pop(), index);
     }
     const prefix = /([\^_])\(/g;
-    let match, cursor = 0, count = 0;
+    let match, cursor = 0;
     while ((match = prefix.exec(text))) {
       const end = closes.get(match.index + 1);
       if (end === undefined) continue;
@@ -35,10 +35,8 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
       paragraph.append(marker);
       cursor = match.index + 1;
       prefix.lastIndex = end + 1;
-      count++;
     }
     paragraph.append(document.createTextNode(text.slice(cursor)));
-    return count;
   };
 
   const canvasId = canvas => String(canvas?.id || canvas?.['@id'] || '');
@@ -75,11 +73,10 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
     const startButton = get('start'), message = get('message');
     const startLabel = startButton.textContent;
     const dialog = get('dialog'), quality = get('quality'), transcription = get('transcription');
-    const notation = get('notation');
+    const editorLink = get('editor-link');
     const clearTranscription = (text = '') => {
       transcription.className = 'kobun-reading__transcription';
       transcription.textContent = text;
-      if (notation) notation.hidden = true;
     };
     const translation = get('translation'), translationEmpty = get('translation-empty');
     const translationEmptyMessage = get('translation-empty-message');
@@ -218,11 +215,18 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
       }
       if (!next) {
         if (selectedPage) { selectedPage = null; resetResult(); }
+        if (editorLink) { editorLink.hidden = true; editorLink.removeAttribute('href'); }
         startButton.disabled = true;
         message.textContent = '現在のcanvasに対応するOCR対象画像が見つかりません。'; return;
       }
       if (selectedPage?.id !== next.id) {
         selectedPage = next; resetResult();
+      }
+      if (editorLink) {
+        const url = new URL(root.dataset.editor, location.href);
+        url.searchParams.set('media_id', String(next.id));
+        editorLink.href = url.href;
+        editorLink.hidden = false;
       }
       startButton.disabled = false;
     };
@@ -390,14 +394,12 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
         const writingDirection = data.writing_direction === 'vertical' ? 'vertical' : 'horizontal';
         const readingDirection = data.reading_direction === 'rtl' ? 'rtl' : 'ltr';
         transcription.className = `kobun-reading__transcription is-${writingDirection} reading-${readingDirection}`;
-        let rubyCount = 0;
         transcription.replaceChildren(...data.lines.map(line => {
           const p = document.createElement('p');
           p.className = `is-${line.direction === 'vertical' ? 'vertical' : 'horizontal'}`;
-          rubyCount += appendTranscription(p, line.text || '（判読結果なし）');
+          appendTranscription(p, line.text || '（判読結果なし）');
           return p;
         }));
-        if (notation) notation.hidden = rubyCount === 0;
         if (!failed || translationFailed) message.textContent = data.quality === 'published' ? '確認済みの内容を表示しました。' : '機械翻刻を表示しました。';
         openDialog();
       } else {

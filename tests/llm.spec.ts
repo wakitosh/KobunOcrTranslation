@@ -809,3 +809,70 @@ test('admin reviews commercial output before saving its model provenance, withou
   expect(saved).toMatchObject({ method: 'commercial', provider: 'openai', model: 'fixture-text-1', human_edited: true, prompt_revision: 'kobun-browser-translation-1' });
   expect(errors).toEqual([]);
 });
+
+for (const scenario of ['administrator', 'editor', 'new-page', 'editor-no-work', 'forbidden-page']) {
+  test(`public edit deep link selects the exact image and protects editorial work: ${scenario}`, async ({ page }) => {
+    const canManage = scenario === 'administrator' || scenario === 'new-page';
+    const hasWork = scenario === 'administrator' || scenario === 'editor';
+    const errors: string[] = [], requests: string[] = [];
+    page.on('pageerror', error => errors.push(error.message));
+    const selectedPage = { item_id: 10, media_id: 201, title: '画像201', item_title: 'テスト資料',
+      item_identifier: 'rb_test', position: 201, service_id: 'https://images.test/201' };
+    const doc = { id, width: 600, height: 900, revision: 3, regions: [], history_count: 0,
+      source: selectedPage, publication_state: hasWork ? 'published' : 'draft',
+      lines: hasWork ? [{ id: 'a', raw: source, x: 500, y: 50, width: 40, height: 750,
+        confidence: .9, classId: 1, readingOrder: 1, direction: 'vertical' }] : [],
+      translation: null, review_note: '', transcription_credit: hasWork ? '翻刻班' : '', transcription_metadata: {} };
+    await serveAssets(page, `<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="${assetPath}dist/workspace.css"><div id="kobun-workspace" data-proxy="/proxy" data-pages="/pages" data-csrf="fixture" data-can-manage="${canManage ? 1 : 0}" data-can-edit-transcription="1"></div><script type="module" src="${assetPath}dist/workspace.js"></script>`);
+    await page.route(`${origin}/pages?**`, route => {
+      const query = new URL(route.request().url()).searchParams;
+      expect(query.get('item_id')).toBe('10');
+      expect(query.get('media_id')).toBe('201');
+      return route.fulfill(scenario === 'forbidden-page'
+        ? { status: 403, json: { error: 'この資料は翻刻修正の許可範囲外です。' } }
+        : { json: { identifier: 'rb_test', title: 'テスト資料', total: 230, page: 3,
+          pages: [selectedPage, { ...selectedPage, media_id: 202, title: '画像202', position: 202 }] } });
+    });
+    await page.route(`${origin}/proxy?**`, async route => {
+      const endpoint = new URL(route.request().url()).searchParams.get('endpoint')!;
+      requests.push(`${route.request().method()} ${endpoint}`);
+      if (endpoint === 'health') return route.fulfill({ json: { ocr_ready: true, llm_ready: false } });
+      if (endpoint.endsWith('/image')) return route.fulfill({ body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=', 'base64'), contentType: 'image/png' });
+      if (route.request().method() === 'POST') {
+        expect(canManage).toBe(true);
+        expect(route.request().postDataJSON()).toEqual({ media_id: 201 });
+        return route.fulfill({ json: doc });
+      }
+      // Delay the initial list to exercise the asynchronous startup path.
+      if (endpoint === 'documents') {
+        await new Promise(resolve => setTimeout(resolve, 60));
+        return route.fulfill({ json: hasWork ? [doc] : [] });
+      }
+      expect(endpoint).toBe(`documents/${id}`);
+      return route.fulfill({ json: doc });
+    });
+    await page.goto(`${origin}/admin?item_id=10&media_id=201`);
+    if (scenario === 'forbidden-page') {
+      await expect(page.getByRole('alert')).toContainText('許可範囲外');
+      await expect(page.locator('.kobun-pages button.is-selected')).toHaveCount(0);
+    } else {
+      await expect(page.locator('.kobun-page-context')).toContainText('テスト資料');
+      await expect(page.locator('.kobun-pages .kobun-tools')).toContainText('3');
+      if (scenario === 'editor-no-work') {
+        await expect(page.getByRole('alert')).toContainText('保存済みの作業がありません');
+        await expect(page.locator('.kobun-pages button').filter({ hasText: '画像201' })).toBeDisabled();
+      } else {
+        await expect(page.locator('.kobun-pages button.is-selected')).toContainText('画像201');
+        if (hasWork) {
+          await expect(page.getByRole('textbox', { name: '行 1 の翻刻' })).toHaveValue(source);
+          await expect(page.locator('.kobun-steps [aria-current="step"]')).toContainText('翻刻確認');
+        } else {
+          await expect(page.locator('.kobun-steps [aria-current="step"]')).toContainText('レイアウト調整');
+        }
+      }
+    }
+    expect(requests.filter(request => request.startsWith('POST '))).toEqual(scenario === 'new-page' ? ['POST documents'] : []);
+    expect(requests.some(request => request.includes('/jobs'))).toBe(false);
+    expect(errors).toEqual([]);
+  });
+}

@@ -6,6 +6,7 @@ namespace KobunOcrTranslation\View\Helper;
 use Laminas\Validator\Csrf;
 use KobunOcrTranslation\VisitorLlmPolicy;
 use KobunOcrTranslation\ReadingScope;
+use KobunOcrTranslation\TranscriptionAccess;
 use Laminas\View\Helper\AbstractHelper;
 use Omeka\Api\Representation\ItemRepresentation;
 
@@ -46,12 +47,17 @@ class ReadingAssistance extends AbstractHelper
             return '';
         }
 
+        $identity = $this->getView()->identity();
+        $editorUrl = TranscriptionAccess::canAccessItem($this->settings, $identity, $item)
+            ? $this->getView()->url('admin/kobun-ocr', ['action' => 'index'], ['query' => ['item_id' => $item->id()]])
+            : null;
         return $this->getView()->partial('kobun-ocr-translation/reading/panel', [
             'pages' => $pages,
             'csrf' => (new Csrf(['name' => 'kobun_ocr_public', 'timeout' => 3600]))->getHash(),
             'translationEnabled' => (bool) $this->siteSettings->get('kobun_ocr_public_translation_enabled', false),
             'visitorLlmPolicy' => VisitorLlmPolicy::load($this->settings),
-            'cacheAdministrator' => ($identity = $this->getView()->identity()) && $identity->getRole() === 'global_admin',
+            'cacheAdministrator' => $identity && $identity->getRole() === 'global_admin',
+            'editorUrl' => $editorUrl,
             'readingToken' => ReadingScope::token(),
         ]);
     }

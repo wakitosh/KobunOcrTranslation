@@ -181,35 +181,51 @@ function Workspace() {
     try { await work(); } catch (e) { setError((e as Error).message); } finally { setPending(false); }
   }
   function mayLeave() { return !unsaved || window.confirm('保存していない変更があります。破棄してページを移動しますか。'); }
-  async function loadPages(page = 1, legacyItemId?: string) {
+  async function loadPages(page = 1, legacyItemId?: string, mediaId?: string, savedDocumentsRequest?: Promise<Document[]>) {
     if (busy || (page === 1 && !mayLeave())) return;
     await guarded(async () => {
       const query = legacyItemId ? `item_id=${encodeURIComponent(legacyItemId)}` : `identifier=${encodeURIComponent(page === 1 ? identifier : loadedIdentifier)}`;
-      const result = await readResponse(await fetch(`${root.dataset.pages}?${query}&page=${page}`, { cache: 'no-store' }));
-      setPages(result.pages); setItemTitle(result.title); setPageIndex(page); setPageTotal(result.total);
+      const target = mediaId ? `&media_id=${encodeURIComponent(mediaId)}` : '';
+      const result = await readResponse(await fetch(`${root.dataset.pages}?${query}&page=${page}${target}`, { cache: 'no-store' }));
+      setPages(result.pages); setItemTitle(result.title); setPageIndex(result.page || page); setPageTotal(result.total);
       setIdentifier(result.identifier); setLoadedIdentifier(result.identifier);
       if (page === 1) { docId.current = null; setDoc(null); setLines([]); setDirty(false); setDraftDirty(false); setStage('source'); }
+      if (mediaId) {
+        const selectedPage = (result.pages as Page[]).find(row => row.media_id === Number(mediaId));
+        if (!selectedPage) throw new Error('指定画像が見つかりません。画像ページ一覧から選び直してください。');
+        // Await the authorized editorial list even when startup is still pending;
+        // visitor caches must never become official data.
+        const savedDocuments = await (savedDocumentsRequest ?? api<Document[]>('documents'));
+        setDocuments(savedDocuments);
+        await selectPage(selectedPage, savedDocuments, true);
+      }
     });
+  }
+  async function selectPage(page: Page, savedDocuments: Document[], editTranscription = false) {
+    const saved = savedDocuments.find(item => item.source.media_id === page.media_id);
+    if (!canManage && !saved) throw new Error('このページには保存済みの作業がありません。管理者が作業を作成してから修正できます。');
+    const next = saved ? await api<Document>(`documents/${saved.id}`)
+      : await api<Document>('documents', 'POST', { media_id: page.media_id });
+    next.source.item_identifier = page.item_identifier;
+    accept(next); setSelected(null);
+    setStage(!canManage || editTranscription && next.lines.length > 0 && next.lines.every(line => line.raw !== undefined)
+      ? 'transcription' : inferStage(next));
+    setTranslationView(next.translation ? 'result' : 'input');
+    if (!saved) setDocuments(await api<Document[]>('documents'));
   }
   async function openPage(page: Page) {
     if (busy || !mayLeave()) return;
     await guarded(async () => {
-      const saved = documents.find(item => item.source.media_id === page.media_id);
-      if (!canManage && !saved) throw new Error('このページには保存済みの作業がありません。管理者が作業を作成してから修正できます。');
-      const next = saved ? await api<Document>(`documents/${saved.id}`)
-        : await api<Document>('documents', 'POST', { media_id: page.media_id });
-      next.source.item_identifier = page.item_identifier;
-      accept(next); setSelected(null); setStage(inferStage(next)); setTranslationView(next.translation ? 'result' : 'input');
-      setDocuments(await api<Document[]>('documents'));
+      await selectPage(page, documents);
     });
   }
   async function openDocument(id: string) {
     if (busy || !mayLeave()) return;
     await guarded(async () => {
       const next = await api<Document>(`documents/${id}`);
-      const result = await readResponse(await fetch(`${root.dataset.pages}?item_id=${next.source.item_id}&page=1`, { cache: 'no-store' }));
+      const result = await readResponse(await fetch(`${root.dataset.pages}?item_id=${next.source.item_id}&media_id=${next.source.media_id}`, { cache: 'no-store' }));
       next.source.item_identifier = result.identifier;
-      setPages(result.pages); setItemTitle(result.title); setPageIndex(1); setPageTotal(result.total);
+      setPages(result.pages); setItemTitle(result.title); setPageIndex(result.page || 1); setPageTotal(result.total);
       setIdentifier(result.identifier); setLoadedIdentifier(result.identifier);
       accept(next); setSelected(null); setStage(inferStage(next)); setTranslationView(next.translation ? 'result' : 'input');
     });
@@ -220,9 +236,10 @@ function Workspace() {
   }, []);
   useEffect(() => {
     api<NonNullable<typeof health>>('health').then(setHealth).catch(e => setError(e.message));
-    api<Document[]>('documents').then(setDocuments).catch(() => {});
-    if (params.get('item_id')) void loadPages(1, params.get('item_id')!);
-    else if (params.get('identifier')) void loadPages();
+    const savedDocumentsRequest = api<Document[]>('documents');
+    savedDocumentsRequest.then(setDocuments).catch(() => {});
+    if (params.get('item_id')) void loadPages(1, params.get('item_id')!, params.get('media_id') || undefined, savedDocumentsRequest);
+    else if (params.get('identifier')) void loadPages(1, undefined, params.get('media_id') || undefined, savedDocumentsRequest);
   }, []);
   useEffect(() => {
     if (!doc || !active(doc)) return;
