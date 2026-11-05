@@ -51,5 +51,11 @@ return [
         'resource_hosts' => ['dc.tulips.tsukuba.ac.jp', 'omeka-s.ddev.site'],
         'public_ocr_pages_per_hour' => 24,
         'public_translations_per_hour' => 6,
+        // One network address may hold many visitors, so these stay well above
+        // the per-session allowances. 0 turns a limit off.
+        'public_ocr_pages_per_client_hour' => 120,
+        'public_translations_per_client_hour' => 30,
+        // Addresses of reverse proxies whose X-Forwarded-For can be believed.
+        'trusted_proxies' => [],
     ], require __DIR__ . '/backend.config.php'),
 ];

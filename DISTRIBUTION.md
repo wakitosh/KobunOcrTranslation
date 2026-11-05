@@ -84,8 +84,13 @@ Omekaの`config/local.config.php`に次を設定します。両サービスを�
     'resource_hosts' => ['archive.example.ac.jp'],
     'public_ocr_pages_per_hour' => 24,
     'public_translations_per_hour' => 6,
+    'public_ocr_pages_per_client_hour' => 120,
+    'public_translations_per_client_hour' => 30,
+    'trusted_proxies' => [],
 ],
 ```
+
+`public_ocr_pages_per_hour` と `public_translations_per_hour` はブラウザセッションごとの上限です。`*_per_client_hour` は接続元アドレスごとの上限で、新しいセッションを作り直しても回避できません。1つのアドレスを多数の閲覧者が共有する場合があるため、セッション上限より高く設定します。`0` で無効です。リバースプロキシの背後では、そのアドレスを `trusted_proxies` に指定してください。指定がないと全閲覧者が1つの接続元として数えられます。`X-Forwarded-For` は、`trusted_proxies` からの接続に限って読みます。
 
 トークンを再生成した場合はPHP側の秘密ファイルにも再コピーしてください。SELinuxでPHPからのループバック接続や秘密ファイルの読取が拒否される場合は、監査ログで拒否箇所を確認し、対象のポリシー・ファイルラベルを調整します。Webサーバーからの外向き接続には`httpd_can_network_connect`が関係する構成があります。[RHEL 9のWebサーバー説明](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/deploying_web_servers_and_reverse_proxies/setting-up-and-configuring-nginx_deploying-web-servers-and-reverse-proxies)、[SELinuxのファイルラベル説明](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/using_selinux/configuring-selinux-for-applications-and-services-with-non-standard-configurations_using-selinux)
 

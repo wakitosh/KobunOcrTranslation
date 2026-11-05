@@ -15,6 +15,7 @@ import time
 from urllib.parse import urlsplit
 import urllib.request
 
+from rate_limit import ClientAllowance
 from store import Store, Problem
 from translation_policy import worker_config
 
@@ -47,6 +48,7 @@ def fetch_image(url, hosts):
 
 def make_handler(store, token, config):
     downloads = threading.Semaphore(1)
+    allowance = ClientAllowance()
 
     def require_translation_ready():
         try:
@@ -121,6 +123,9 @@ def make_handler(store, token, config):
                         "ndl_revision": config["ndl_revision"], "llm_model": config["llm_model"],
                         "llm_model_id": config.get("llm_model_id", ""), 'maintenance': store.maintenance,
                         'prompt_revision': config.get('prompt_revision')})
+                    return
+                if parts == ['client-allowance'] and self.command == 'POST':
+                    self.respond(200, allowance.handle(self.body()))
                     return
                 if parts == ['maintenance'] and self.command == 'POST':
                     self.respond(200, store.set_maintenance(self.body().get('enabled')))

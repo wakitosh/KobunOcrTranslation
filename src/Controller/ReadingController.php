@@ -7,6 +7,7 @@ use Laminas\Http\Client;
 use Laminas\Mvc\Controller\AbstractActionController;
 use Laminas\Session\Container;
 use Laminas\Validator\Csrf;
+use KobunOcrTranslation\ClientAddress;
 use KobunOcrTranslation\VisitorLlmPolicy;
 use KobunOcrTranslation\ReadingScope;
 use KobunOcrTranslation\ReadingCachePolicy;
@@ -28,13 +29,13 @@ class PublicRateLimitException extends \RuntimeException
     public int $retryAt;
     public int $limit;
 
-    public function __construct(int $retryAfter, int $retryAt, int $limit, string $subject)
+    public function __construct(int $retryAfter, int $retryAt, int $limit, string $subject, string $client = 'この端末')
     {
         $this->retryAfter = $retryAfter;
         $this->retryAt = $retryAt;
         $this->limit = $limit;
         $minutes = max(1, (int) ceil($retryAfter / 60));
-        parent::__construct("この端末では{$subject}を1時間に{$limit}回まで利用できます。次に試せるまで約{$minutes}分です。", 429);
+        parent::__construct("{$client}では{$subject}を1時間に{$limit}回まで利用できます。次に試せるまで約{$minutes}分です。", 429);
     }
 }
 
@@ -253,16 +254,44 @@ class ReadingController extends AbstractActionController
         $times = array_values(array_filter((array) ($buckets[$key] ?? []), static fn ($time) => is_int($time) && $time > $now - 3600));
         if (count($times) >= $limit) {
             $retryAt = min($times) + 3600;
-            $subject = $bucket === 'translation' ? '現代語訳' : '新しいページの翻刻';
-            throw new PublicRateLimitException(max(1, $retryAt - $now), $retryAt, $limit, $subject);
+            throw new PublicRateLimitException(max(1, $retryAt - $now), $retryAt, $limit, $this->rateSubject($bucket));
         }
+        $this->clientAllowance($bucket, 'take');
         $times[] = $now;
         $buckets[$key] = $times;
         $session->buckets = $buckets;
     }
 
-    private function releaseRateLimit(string $bucket): void
+    private function rateSubject(string $bucket): string
     {
+        return $bucket === 'translation' ? '現代語訳' : '新しいページの翻刻';
+    }
+
+    /** A new browser session costs nothing, so the session limit alone stops no one. */
+    private function clientAllowance(string $bucket, string $action): void
+    {
+        $options = $this->options();
+        $limit = (int) ($options[$bucket === 'translation'
+            ? 'public_translations_per_client_hour' : 'public_ocr_pages_per_client_hour'] ?? 0);
+        if ($limit <= 0) {
+            return;
+        }
+        $address = ClientAddress::resolve($this->getRequest()->getServer()->toArray(), (array) ($options['trusted_proxies'] ?? []));
+        $result = $this->decode($this->upstream('POST', 'client-allowance', [
+            'key' => ClientAddress::key($address, trim((string) @file_get_contents($options['token_file']))),
+            'bucket' => $bucket, 'limit' => $limit, 'action' => $action,
+        ]));
+        if (empty($result['allowed'])) {
+            throw new PublicRateLimitException(max(1, (int) ($result['retry_after'] ?? 1)), (int) ($result['retry_at'] ?? 0),
+                (int) ($result['limit'] ?? $limit), $this->rateSubject($bucket), 'この接続元');
+        }
+    }
+
+    private function releaseRateLimit(string $bucket, bool $client = true): void
+    {
+        if ($client) {
+            $this->clientAllowance($bucket, 'release');
+        }
         $session = new Container('kobun_ocr_public_limits_v2');
         $key = (int) $this->site()->id() . ':' . $bucket;
         $buckets = (array) ($session->buckets ?? []);
@@ -401,12 +430,30 @@ class ReadingController extends AbstractActionController
             }
             $source = $this->imageSource($media, 'assist');
             $source['cache_scope'] = $this->cachePolicy()['ocr_mode'] === 'shared' ? 'shared' : $this->readingScope();
-            $doc = $this->decode($this->upstream('POST', 'documents', $source));
-            if (!$doc['lines'] && !in_array($doc['job']['status'] ?? '', ['queued', 'running'], true)) {
-                $doc = $this->submit($doc, 'layout', 'ocr');
-            } elseif (($doc['job']['status'] ?? '') === 'error'
-                && array_filter($doc['lines'], static fn ($line) => !array_key_exists('raw', $line))) {
-                $doc = $this->submit($doc, 'recognize');
+            // The worker downloads and stores a new image as soon as it is asked
+            // to, so a new page is charged first. One it already holds is not.
+            $charged = false;
+            if ($this->upstream('POST', 'documents/find', $source)->getStatusCode() === 404) {
+                $this->rateLimit('ocr');
+                $charged = true;
+            }
+            $stored = false;
+            try {
+                $doc = $this->decode($this->upstream('POST', 'documents', $source));
+                $stored = true;
+                if (!$doc['lines'] && !in_array($doc['job']['status'] ?? '', ['queued', 'running'], true)) {
+                    $doc = $this->submit($doc, 'layout', $charged ? null : 'ocr');
+                } elseif (($doc['job']['status'] ?? '') === 'error'
+                    && array_filter($doc['lines'], static fn ($line) => !array_key_exists('raw', $line))) {
+                    $doc = $this->submit($doc, 'recognize');
+                }
+            } catch (\Throwable $e) {
+                // A full queue did not spend inference capacity, but an image
+                // already stored did cost something, so the client stays charged.
+                if ($charged) {
+                    $this->releaseRateLimit('ocr', !$stored);
+                }
+                throw $e;
             }
             return $this->jsonResponse($this->publicData($doc), 202);
         } catch (PublicRateLimitException $e) {

@@ -69,8 +69,13 @@ RHEL 9.7では[INSTALL_RHEL9.md](INSTALL_RHEL9.md)のGitHub取得＋一括イン
     'resource_hosts' => ['archive.example.ac.jp'],
     'public_ocr_pages_per_hour' => 24,
     'public_translations_per_hour' => 6,
+    'public_ocr_pages_per_client_hour' => 120,
+    'public_translations_per_client_hour' => 30,
+    'trusted_proxies' => [],
 ],
 ```
+
+`public_ocr_pages_per_hour` と `public_translations_per_hour` はブラウザセッションごとの上限です。`*_per_client_hour` は接続元アドレスごとの上限で、新しいセッションを作り直しても回避できません。1つのアドレスを多数の閲覧者が共有する場合があるため、セッション上限より高く設定します。`0` で無効です。リバースプロキシの背後では、そのアドレスを `trusted_proxies` に指定してください。指定がないと全閲覧者が1つの接続元として数えられます。`X-Forwarded-For` は、`trusted_proxies` からの接続に限って読みます。
 
 モデルの初回取得はサーバ管理者が行います。設定画面の「未取得モデルの導入方法」に取得コマンドを表示します。候補と固定リビジョンは `worker/models.json` に記録しています。
 
