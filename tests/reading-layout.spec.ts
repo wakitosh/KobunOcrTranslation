@@ -121,6 +121,7 @@ test.describe('touch layout editing', () => {
     expect(dimensions.scroll).toBeLessThanOrEqual(dimensions.width + 1);
     expect((await page.getByRole('button', { name: '枠を描く', exact: true }).boundingBox())!.height).toBeGreaterThanOrEqual(44);
     await page.getByRole('button', { name: '枠を描く', exact: true }).tap();
+    await expect(page.locator('.edit-layer')).toHaveCount(0);
     await page.locator('.kobun-public-layout__viewer').scrollIntoViewIfNeeded();
     const view = (await page.locator('.kobun-public-layout__viewer').boundingBox())!;
     const touch = await page.context().newCDPSession(page);

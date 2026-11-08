@@ -112,7 +112,7 @@ function Editor({ layout, options, dirty }: { layout: Layout; options: Options; 
         regionMode={drawing && !busy} selectedRegion={region} onRegionDraw={setRegion} />
     </div>
     <div className="kobun-public-layout__toolbar">
-      <button type="button" aria-pressed={drawing} disabled={busy || lines.length >= 500} onClick={() => { setDrawing(!drawing); setRegion(null); }}>枠を描く</button>
+      <button type="button" aria-pressed={drawing} disabled={busy || lines.length >= 500} onClick={() => { setDrawing(!drawing); setRegion(null); setSelectedId(null); }}>枠を描く</button>
       {drawing && <button type="button" disabled={!region || busy} onClick={() => region && add(region)}>描いた枠を追加</button>}
       <button type="button" disabled={!selected || busy} onClick={() => selected && remove(selected.readingOrder)}>選択した行を削除</button>
     </div>

@@ -1,24 +1,24 @@
-import { c as W, j as t, r as l, p as Z, b as ee, I as te, e as Y, f as re } from "./viewer-e2wgwl0s.js";
-const X = (o) => o.map((u, h) => ({ ...u, readingOrder: h + 1 }));
-function ae(o, u, h) {
-  const i = W.createRoot(o), f = { current: !1 };
-  return i.render(/* @__PURE__ */ t.jsx(ne, { layout: u, options: h, dirty: f })), { destroy: () => i.unmount(), isDirty: () => f.current };
+import { c as W, j as t, r as o, p as Z, b as ee, I as te, e as Y, f as re } from "./viewer-e2wgwl0s.js";
+const X = (l) => l.map((h, b) => ({ ...h, readingOrder: b + 1 }));
+function ae(l, h, b) {
+  const i = W.createRoot(l), f = { current: !1 };
+  return i.render(/* @__PURE__ */ t.jsx(ne, { layout: h, options: b, dirty: f })), { destroy: () => i.unmount(), isDirty: () => f.current };
 }
-function ne({ layout: o, options: u, dirty: h }) {
-  const [i, f] = l.useState(X(o.lines)), [x, A] = l.useState(o.reading_direction || "auto"), [m, b] = l.useState(null), [k, D] = l.useState([]), [C, M] = l.useState([]), [v, K] = l.useState(!1), [j, N] = l.useState(null), [s, U] = l.useState(!1), [E, y] = l.useState(""), O = l.useRef(null), w = l.useRef(!0), $ = l.useRef(null);
-  l.useEffect(() => (w.current = !0, $.current?.focus({ preventScroll: !0 }), () => {
+function ne({ layout: l, options: h, dirty: b }) {
+  const [i, f] = o.useState(X(l.lines)), [x, A] = o.useState(l.reading_direction || "auto"), [m, u] = o.useState(null), [k, D] = o.useState([]), [C, M] = o.useState([]), [v, K] = o.useState(!1), [j, N] = o.useState(null), [s, U] = o.useState(!1), [E, y] = o.useState(""), O = o.useRef(null), w = o.useRef(!0), $ = o.useRef(null);
+  o.useEffect(() => (w.current = !0, $.current?.focus({ preventScroll: !0 }), () => {
     w.current = !1;
   }), []);
-  const a = i.find((e) => e.id === m), g = Z(i.length ? i : o.lines), S = re(g, x), B = g === "vertical" ? S === "rtl" ? "ArrowRight" : "ArrowLeft" : "ArrowUp", z = g === "vertical" ? S === "rtl" ? "ArrowLeft" : "ArrowRight" : "ArrowDown", R = () => ({ lines: i, direction: x });
+  const a = i.find((e) => e.id === m), g = Z(i.length ? i : l.lines), S = re(g, x), B = g === "vertical" ? S === "rtl" ? "ArrowRight" : "ArrowLeft" : "ArrowUp", z = g === "vertical" ? S === "rtl" ? "ArrowLeft" : "ArrowRight" : "ArrowDown", R = () => ({ lines: i, direction: x });
   function p(e, r = x) {
-    s || (D((n) => [...n.slice(-29), R()]), M([]), f(X(e)), A(r), h.current = !0, y(""));
+    s || (D((n) => [...n.slice(-29), R()]), M([]), f(X(e)), A(r), b.current = !0, y(""));
   }
   function _(e) {
     const r = e ? k : C, n = r.at(-1);
-    !n || s || (e ? (M((c) => [...c, R()]), D(k.slice(0, -1))) : (D((c) => [...c, R()]), M(C.slice(0, -1))), f(n.lines), A(n.direction), h.current = !0);
+    !n || s || (e ? (M((c) => [...c, R()]), D(k.slice(0, -1))) : (D((c) => [...c, R()]), M(C.slice(0, -1))), f(n.lines), A(n.direction), b.current = !0);
   }
   function H(e) {
-    b(i.find((r) => r.readingOrder === e)?.id || null);
+    u(i.find((r) => r.readingOrder === e)?.id || null);
   }
   function P(e) {
     const r = i.findIndex((d) => d.id === m);
@@ -33,7 +33,7 @@ function ne({ layout: o, options: u, dirty: h }) {
     p(i.map((n) => n.readingOrder === e ? { ...n, ...r, direction: Y(r), raw: void 0 } : n));
   }
   function L(e) {
-    p(i.filter((r) => r.readingOrder !== e)), b(null);
+    p(i.filter((r) => r.readingOrder !== e)), u(null);
   }
   function V(e) {
     if (i.length >= 500) {
@@ -48,13 +48,13 @@ function ne({ layout: o, options: u, dirty: h }) {
       readingOrder: i.length + 1,
       direction: Y(e)
     };
-    p([...i, r]), b(r.id), K(!1), N(null);
+    p([...i, r]), u(r.id), K(!1), N(null);
   }
   function q() {
-    const e = O.current?.getVisibleImageBounds() || { x: 0, y: 0, width: o.width, height: o.height }, r = Math.max(4, Math.min(o.width, Math.round(e.width * (g === "vertical" ? 0.12 : 0.7)))), n = Math.max(4, Math.min(o.height, Math.round(e.height * (g === "vertical" ? 0.7 : 0.12))));
+    const e = O.current?.getVisibleImageBounds() || { x: 0, y: 0, width: l.width, height: l.height }, r = Math.max(4, Math.min(l.width, Math.round(e.width * (g === "vertical" ? 0.12 : 0.7)))), n = Math.max(4, Math.min(l.height, Math.round(e.height * (g === "vertical" ? 0.7 : 0.12))));
     V({
-      x: Math.round(Math.max(0, Math.min(o.width - r, e.x + (e.width - r) / 2))),
-      y: Math.round(Math.max(0, Math.min(o.height - n, e.y + (e.height - n) / 2))),
+      x: Math.round(Math.max(0, Math.min(l.width - r, e.x + (e.width - r) / 2))),
+      y: Math.round(Math.max(0, Math.min(l.height - n, e.y + (e.height - n) / 2))),
       width: r,
       height: n
     });
@@ -63,9 +63,9 @@ function ne({ layout: o, options: u, dirty: h }) {
     if (!(!i.length || s)) {
       U(!0), y("");
       try {
-        await u.onSubmit({
-          id: o.id,
-          base_revision: o.revision,
+        await h.onSubmit({
+          id: l.id,
+          base_revision: l.revision,
           reading_direction: x,
           lines: i.map(({ id: e, x: r, y: n, width: c, height: d }) => ({ id: e, x: r, y: n, width: c, height: d }))
         });
@@ -114,7 +114,7 @@ function ne({ layout: o, options: u, dirty: h }) {
       te,
       {
         ref: O,
-        dataUrl: u.imageUrl,
+        dataUrl: h.imageUrl,
         lines: i,
         regions: [],
         showOverlays: !0,
@@ -130,7 +130,7 @@ function ne({ layout: o, options: u, dirty: h }) {
     ) }),
     /* @__PURE__ */ t.jsxs("div", { className: "kobun-public-layout__toolbar", children: [
       /* @__PURE__ */ t.jsx("button", { type: "button", "aria-pressed": v, disabled: s || i.length >= 500, onClick: () => {
-        K(!v), N(null);
+        K(!v), N(null), u(null);
       }, children: "枠を描く" }),
       v && /* @__PURE__ */ t.jsx("button", { type: "button", disabled: !j || s, onClick: () => j && V(j), children: "描いた枠を追加" }),
       /* @__PURE__ */ t.jsx("button", { type: "button", disabled: !a || s, onClick: () => a && L(a.readingOrder), children: "選択した行を削除" })
@@ -149,11 +149,11 @@ function ne({ layout: o, options: u, dirty: h }) {
         "aria-pressed": m === e.id,
         "aria-label": `行 ${r + 1} を選択`,
         onClick: () => {
-          b(e.id), O.current?.scrollToLine(e.readingOrder);
+          u(e.id), O.current?.scrollToLine(e.readingOrder);
         },
-        onFocus: () => b(e.id),
+        onFocus: () => u(e.id),
         onDragStart: (n) => {
-          b(e.id), n.dataTransfer.setData("text/plain", e.id);
+          u(e.id), n.dataTransfer.setData("text/plain", e.id);
         },
         onDragOver: (n) => n.preventDefault(),
         onDrop: (n) => {
@@ -161,7 +161,7 @@ function ne({ layout: o, options: u, dirty: h }) {
           const c = n.dataTransfer.getData("text/plain"), d = i.findIndex((Q) => Q.id === c);
           if (d < 0 || d === r) return;
           const T = [...i], [J] = T.splice(d, 1);
-          T.splice(r, 0, J), p(T), b(c);
+          T.splice(r, 0, J), p(T), u(c);
         },
         children: [
           /* @__PURE__ */ t.jsx("b", { children: r + 1 }),
@@ -193,7 +193,7 @@ function ne({ layout: o, options: u, dirty: h }) {
             min: r < 2 ? 0 : 4,
             disabled: s,
             onChange: () => {
-              h.current = !0;
+              b.current = !0;
             },
             onKeyDown: (n) => {
               n.key === "Enter" && (n.preventDefault(), n.currentTarget.blur());
@@ -203,7 +203,7 @@ function ne({ layout: o, options: u, dirty: h }) {
                 n.currentTarget.value = String(Math.round(a[e]));
                 return;
               }
-              const c = e === "x" ? o.width - a.width : e === "y" ? o.height - a.height : e === "width" ? o.width - a.x : o.height - a.y, d = Math.max(r < 2 ? 0 : 4, Math.min(c, Math.round(n.currentTarget.valueAsNumber)));
+              const c = e === "x" ? l.width - a.width : e === "y" ? l.height - a.height : e === "width" ? l.width - a.x : l.height - a.y, d = Math.max(r < 2 ? 0 : 4, Math.min(c, Math.round(n.currentTarget.valueAsNumber)));
               if (d === a[e]) {
                 n.currentTarget.value = String(d);
                 return;
@@ -227,7 +227,7 @@ function ne({ layout: o, options: u, dirty: h }) {
       /* @__PURE__ */ t.jsx("button", { type: "button", className: "is-primary", disabled: s || !i.length, onClick: () => {
         G();
       }, children: s ? "再認識を開始しています…" : "このレイアウトで翻刻する" }),
-      /* @__PURE__ */ t.jsx("button", { type: "button", disabled: s, onClick: u.onCancel, children: "結果に戻る" })
+      /* @__PURE__ */ t.jsx("button", { type: "button", disabled: s, onClick: h.onCancel, children: "結果に戻る" })
     ] })
   ] });
 }
