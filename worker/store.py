@@ -330,6 +330,65 @@ class Store(CacheStorage):
             self.commit(doc, "human_edit")
             return doc
 
+    def recognize_private_layout(self, ident, body):
+        """Fork visitor adjustments into the current view; never edit a shared source."""
+        allowed = {'scope', 'base_revision', 'lines', 'reading_direction', 'request_scope'}
+        if set(body) - allowed or not {'scope', 'base_revision', 'lines', 'reading_direction'} <= set(body):
+            raise Problem('レイアウトの指定が不正です。')
+        scope = self.cache_scope({'cache_scope': body['scope']})
+        if scope == 'shared':
+            raise Problem('個人用の閲覧セッションが必要です。', 403)
+        with self.lock:
+            parent = self.get(ident)
+            if parent.get('workflow') != 'assist':
+                raise Problem('確認・公開用データのレイアウトは変更できません。', 409)
+            if self.cache_scope(parent['source']) not in ('shared', scope):
+                raise Problem('結果が見つかりません。', 404)
+            self.check_revision(parent, body['base_revision'])
+            direction = validate_reading_direction(body['reading_direction'])
+            # Text, source URLs and publication metadata cannot be supplied here.
+            if not isinstance(body['lines'], list) or any(not isinstance(line, dict)
+                or set(line) - {'id', 'x', 'y', 'width', 'height'} for line in body['lines']):
+                raise Problem('行枠の指定が不正です。')
+            lines = validate_lines(body['lines'], parent['width'], parent['height'])
+            if not lines:
+                raise Problem('文字認識する行枠を1つ以上指定してください。')
+            if sum(line['width'] * line['height'] for line in lines) > 2 * parent['width'] * parent['height']:
+                raise Problem('行枠の合計面積が大きすぎます。重なった枠や大きすぎる枠を減らしてください。')
+            if self.maintenance:
+                raise Problem('実行サービスの切替中です。少し待ってから再実行してください。', 503)
+            request_scope = body.get('request_scope', scope)
+            # Reject a full queue before copying an image or changing any layout.
+            self._check_admission('recognize', request_scope)
+            personal = parent
+            created = False
+            if self.cache_scope(parent['source']) == 'shared':
+                source = {**parent['source'], 'cache_scope': scope}
+                personal = self.existing(source)
+                if personal:
+                    self.check_revision(personal, personal['revision'])
+                else:
+                    self._cache_protected.add(ident)
+                    try:
+                        personal = self.create(source, (self.directory(ident)/'image.jpg').read_bytes())
+                        created = True
+                    finally:
+                        self._cache_protected.discard(ident)
+            original = copy.deepcopy(personal)
+            try:
+                personal = self.save_layout(personal['id'], {'base_revision': personal['revision'],
+                    'lines': lines, 'reading_direction': direction})
+                personal.update(visitor_layout=True, regions=copy.deepcopy(parent['regions']))
+                self.write(personal)
+                return self.submit(personal['id'], {'operation': 'recognize',
+                    'base_revision': personal['revision'], 'request_scope': request_scope})
+            except Exception:
+                if created:
+                    self._delete_cache_doc(personal)
+                else:
+                    self.write(original)
+                raise
+
     def save_transcription(self, ident, body):
         """Update line text only; geometry, order, OCR output and history remain attributable."""
         with self.lock:

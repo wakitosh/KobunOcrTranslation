@@ -111,7 +111,7 @@ class ReadingController extends AbstractActionController
         return false;
     }
 
-    private function requirePost(): array
+    private function requirePost(int $maxBytes = 8192): array
     {
         if (!$this->getRequest()->isPost()) {
             throw new \InvalidArgumentException('POSTで送信してください。');
@@ -120,7 +120,7 @@ class ReadingController extends AbstractActionController
         if (!$header || !(new Csrf(['name' => 'kobun_ocr_public', 'timeout' => 3600]))->isValid($header->getFieldValue())) {
             throw new \RuntimeException('画面の有効期限が切れました。ページを再読み込みしてください。', 403);
         }
-        if (strlen($this->getRequest()->getContent()) > 8192) {
+        if (strlen($this->getRequest()->getContent()) > $maxBytes) {
             throw new \InvalidArgumentException('入力が大きすぎます。');
         }
         $body = json_decode($this->getRequest()->getContent(), true, 16, JSON_THROW_ON_ERROR);
@@ -264,7 +264,7 @@ class ReadingController extends AbstractActionController
 
     private function rateSubject(string $bucket): string
     {
-        return $bucket === 'translation' ? '現代語訳' : '新しいページの翻刻';
+        return $bucket === 'translation' ? '現代語訳' : '翻刻の作成・再認識';
     }
 
     /** A new browser session costs nothing, so the session limit alone stops no one. */
@@ -399,6 +399,10 @@ class ReadingController extends AbstractActionController
             ] : null,
             'translation_available' => $translationEnabled,
             'can_manage_cache' => $shared && $this->cacheAdministrator() !== null,
+            'can_adjust_layout' => !$published && ($doc['workflow'] ?? '') === 'assist',
+            'layout_line_count' => count((array) ($doc['lines'] ?? [])),
+            'transcription_scope' => $published ? 'published' : ($shared ? 'shared' : 'private'),
+            'visitor_layout' => (bool) ($doc['visitor_layout'] ?? false),
             'can_manage_translation_cache' => $shared && $policy['translation_mode'] === 'shared' && $this->cacheAdministrator() !== null,
             'translation_scope' => $translationScope,
             'translation_request_id' => $personal !== null ? (string) $personal['id'] : null,
@@ -488,6 +492,94 @@ class ReadingController extends AbstractActionController
         } catch (\Throwable $e) {
             $status = in_array((int) $e->getCode(), [403, 404, 410], true) ? (int) $e->getCode() : 503;
             return $this->jsonResponse(['error' => $e->getMessage() ?: '結果を取得できません。'], $status);
+        }
+    }
+
+    private function layoutDocument(string $id): array
+    {
+        if (!$this->enabled()) {
+            throw new \RuntimeException('このサイトでは閲覧支援を公開していません。', 404);
+        }
+        $this->readingScope();
+        $doc = $this->readPublicDocument($id);
+        if (($doc['workflow'] ?? '') !== 'assist') {
+            throw new \RuntimeException('確認済みデータの修正は、権限のあるアカウントで管理画面から行ってください。', 409);
+        }
+        return $doc;
+    }
+
+    public function layoutAction()
+    {
+        try {
+            $body = $this->requirePost();
+            if (count($body) !== 2 || !is_string($body['id'] ?? null) || !is_int($body['base_revision'] ?? null)) {
+                throw new \InvalidArgumentException('レイアウトの指定が不正です。');
+            }
+            $doc = $this->layoutDocument($body['id']);
+            if ((int) $doc['revision'] !== $body['base_revision'] || in_array($doc['job']['status'] ?? '', ['queued', 'running'], true)) {
+                throw new \RuntimeException('結果が更新されたか処理中です。結果を開き直してから調整してください。', 409);
+            }
+            $lines = array_map(static function (array $line): array {
+                return array_intersect_key($line, array_flip(['id', 'x', 'y', 'width', 'height', 'readingOrder', 'confidence', 'classId', 'direction', 'raw']));
+            }, (array) $doc['lines']);
+            return $this->jsonResponse(['id' => $doc['id'], 'revision' => (int) $doc['revision'],
+                'width' => (int) $doc['width'], 'height' => (int) $doc['height'],
+                'lines' => $lines, 'reading_direction' => $doc['reading_direction'] ?? 'auto']);
+        } catch (\JsonException | \InvalidArgumentException $e) {
+            return $this->jsonResponse(['error' => $e->getMessage()], 400);
+        } catch (\Throwable $e) {
+            $status = in_array((int) $e->getCode(), [403, 404, 409, 410, 503], true) ? (int) $e->getCode() : 503;
+            return $this->jsonResponse(['error' => $e->getMessage()], $status);
+        }
+    }
+
+    public function layoutImageAction()
+    {
+        try {
+            $doc = $this->layoutDocument((string) $this->params()->fromQuery('id', ''));
+            $upstream = $this->upstream('GET', 'documents/' . $doc['id'] . '/image');
+            if (!$upstream->isSuccess()) {
+                throw new \RuntimeException('画像を取得できません。', 503);
+            }
+            $response = $this->getResponse();
+            $response->getHeaders()->addHeaderLine('Content-Type', 'image/jpeg');
+            $response->getHeaders()->addHeaderLine('Cache-Control', 'no-store, private');
+            $response->getHeaders()->addHeaderLine('X-Content-Type-Options', 'nosniff');
+            $response->setContent($upstream->getBody());
+            return $response;
+        } catch (\Throwable $e) {
+            $status = in_array((int) $e->getCode(), [403, 404, 409, 410], true) ? (int) $e->getCode() : 503;
+            return $this->jsonResponse(['error' => $e->getMessage()], $status);
+        }
+    }
+
+    public function layoutRecognizeAction()
+    {
+        $charged = false;
+        try {
+            $body = $this->requirePost(262144);
+            if (count($body) !== 4 || !is_string($body['id'] ?? null) || !is_int($body['base_revision'] ?? null)
+                || !is_array($body['lines'] ?? null) || count($body['lines']) < 1 || count($body['lines']) > 500
+                || !in_array($body['reading_direction'] ?? null, ['auto', 'ltr', 'rtl'], true)) {
+                throw new \InvalidArgumentException('レイアウトの指定が不正です。');
+            }
+            $doc = $this->layoutDocument($body['id']);
+            $this->rateLimit('ocr');
+            $charged = true;
+            $updated = $this->decode($this->upstream('POST', 'documents/' . $doc['id'] . '/visitor-layout', [
+                'scope' => $this->readingScope(), 'request_scope' => $this->requestScope(),
+                'base_revision' => $body['base_revision'], 'lines' => $body['lines'],
+                'reading_direction' => $body['reading_direction'],
+            ]));
+            return $this->jsonResponse($this->publicData($updated), 202);
+        } catch (PublicRateLimitException $e) {
+            return $this->jsonResponse(['error' => $e->getMessage(), 'retry_after' => $e->retryAfter,
+                'retry_at' => $e->retryAt, 'limit' => $e->limit], 429);
+        } catch (\Throwable $e) {
+            if ($charged) $this->releaseRateLimit('ocr');
+            $status = $e instanceof \InvalidArgumentException || $e instanceof \JsonException ? 400
+                : (in_array((int) $e->getCode(), [403, 404, 409, 410, 429, 503], true) ? (int) $e->getCode() : 503);
+            return $this->jsonResponse($this->errorData($e, 'レイアウトを使った文字認識を開始できません。'), $status);
         }
     }
 

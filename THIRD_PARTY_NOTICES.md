@@ -5,7 +5,7 @@
 - Source: [honkoku-ocr-web](https://github.com/yuta1984/honkoku-ocr-web), by **Yuta Hashimoto / 橋本雄太**.
 - Fixed revision: `24469701412edda5be26c89784a29c7525bbb899`.
 - License: [Creative Commons Attribution 4.0 International](https://creativecommons.org/licenses/by/4.0/).
-- Adapted files: `ui/ImageViewer.tsx`, `ui/main.tsx`, portions of `ui/viewer.css` and `ui/workspace.css`.
+- Adapted files: `ui/ImageViewer.tsx`, `ui/main.tsx`, `ui/public-layout.tsx`, portions of `ui/viewer.css`, `ui/workspace.css` and `ui/public-layout.css`.
 - Changes: local data types; NDL plain text replaces Koji conversion; integration with Omeka and server-side inference; a sequential parent workspace; disabling geometry edits outside the layout stage; explicit line focus; direction-aware vertical/horizontal display; orientation-aware keyboard and button reordering. Subsequent reliability changes are noted in the source.
 - The original browser inference, browser model cache, commercial LLM connectors and data store are not bundled. This module is an independent adaptation; attribution does not imply endorsement.
 - The upstream license is retained at `licenses/honkoku-ocr-web-CC-BY-4.0.txt`.

@@ -106,6 +106,24 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
     let externalAbort = null, privateTranslation = null;
     let requestEpoch = 0, cacheBusy = false, cacheJob = null;
     let localTranslationId = null, localResultId = null;
+    const layoutButton = get('adjust-layout'), layoutHost = get('layout-editor'), layoutStatus = get('layout-status');
+    let layoutEditor = null, layoutBlob = null, layoutLoading = false, layoutSaving = false, layoutToken = 0;
+    function cleanupLayout() {
+      layoutToken++;
+      if (layoutEditor) layoutEditor.destroy();
+      layoutEditor = null;
+      if (layoutBlob) URL.revokeObjectURL(layoutBlob);
+      layoutBlob = null; layoutLoading = false; layoutSaving = false;
+      if (layoutHost) { layoutHost.hidden = true; layoutHost.replaceChildren(); }
+      root.classList.remove('is-layout-editing');
+      if (layoutStatus) { layoutStatus.hidden = true; layoutStatus.textContent = ''; }
+    }
+    function leaveLayout() {
+      if (layoutSaving) return false;
+      if (layoutEditor?.isDirty() && !window.confirm('未保存のレイアウト変更を破棄して、結果に戻りますか？')) return false;
+      cleanupLayout(); activateTab('transcription'); renderCacheControls(current);
+      return true;
+    }
     let policy;
     try { policy = visitorLlmPolicy(JSON.parse(root.dataset.llmPolicy)); }
     catch { policy = visitorLlmPolicy(null); }
@@ -125,15 +143,19 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
     const externalStatus = get('external-status'), cancelTranslation = get('cancel-translation'), clearPrivate = get('clear-private');
     const cancelExternal = () => { if (externalAbort) externalAbort.abort(); externalAbort = null; };
     const renderCacheControls = data => {
-      if (!cacheControls) return;
-      cacheControls.hidden = !(data?.can_manage_cache && data.quality === 'machine' && root.dataset.cache);
-      const translationCache = data?.can_manage_translation_cache ?? (data?.translation_scope === undefined);
-      root.querySelectorAll('[data-translation-cache]').forEach(node => { node.hidden = !translationCache; });
-      const busy = cacheBusy || advancing || !!externalAbort || ['queued', 'running'].includes(data?.job?.status);
+      const busy = cacheBusy || advancing || !!externalAbort || layoutLoading || !!layoutEditor || ['queued', 'running'].includes(data?.job?.status);
+      if (layoutButton) {
+        layoutButton.hidden = !(data?.can_adjust_layout && data.quality === 'machine' && root.dataset.layout);
+        layoutButton.disabled = busy;
+      }
       if (data) {
         startButton.disabled = busy || !selectedPage;
         if (translateButton) translateButton.disabled = busy;
       }
+      if (!cacheControls) return;
+      cacheControls.hidden = !(data?.can_manage_cache && data.quality === 'machine' && root.dataset.cache);
+      const translationCache = data?.can_manage_translation_cache ?? (data?.translation_scope === undefined);
+      root.querySelectorAll('[data-translation-cache]').forEach(node => { node.hidden = !translationCache; });
       cacheButtons.forEach(button => {
         const target = button.dataset.cacheTarget, deleting = button.dataset.cacheAction === 'delete';
         const recognized = data?.lines?.length && data.lines.some(line => line.text?.trim());
@@ -163,6 +185,7 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
     };
     const stop = () => { if (timer) window.clearTimeout(timer); timer = null; };
     const closeDialog = () => {
+      if ((layoutEditor || layoutLoading) && !leaveLayout()) return;
       readingWindow.save();
       if (dialog.open && dialog.close) dialog.close();
       else dialog.removeAttribute('open');
@@ -192,6 +215,7 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
       get('modal-title').textContent = name === 'translation' ? '現代語訳' : '翻刻';
     };
     const resetResult = () => {
+      cleanupLayout();
       if (current && root.dataset.forget) void request(root.dataset.forget, { target: 'all' }).catch(() => {});
       // Each canvas gets a new nonce. A delayed cleanup for the previous
       // canvas cannot delete the next canvas's private work.
@@ -334,7 +358,9 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
         const privateResult = !!privateTranslation || data.translation_scope === 'private' && !!data.translation_request_id;
         retention.hidden = data.quality === 'published' && !privateResult;
         const expiry = data.ocr_expires_at ? new Date(data.ocr_expires_at * 1000).toLocaleString('ja-JP') : '';
-        retention.textContent = privateResult
+        retention.textContent = data.visitor_layout
+          ? `調整後の翻刻は、この閲覧画面だけの自分用の一時結果です。他の訪問者には共有されません。${expiry ? `一時保存の期限: ${expiry}。` : ''}`
+          : privateResult
           ? '自分用の現代語訳は、この閲覧画面だけの一時的な支援情報です。図書館の確認済みデータとして登録されません。'
           : `機械翻刻は閲覧支援のための一時的な結果です。${expiry ? `一時保存の期限: ${expiry}。` : ''}`;
       }
@@ -347,7 +373,7 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
         cacheJob = null;
       }
       startButton.textContent = startLabel;
-      startButton.disabled = active || cacheBusy || !!externalAbort || !selectedPage;
+      startButton.disabled = active || cacheBusy || !!externalAbort || layoutLoading || !!layoutEditor || !selectedPage;
       setState(data.label, `kobun-reading__state is-${data.quality}`);
       quality.textContent = data.quality === 'published'
         ? '図書館で内容を確認し、公開したデータです。'
@@ -387,6 +413,7 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
       const failed = data.job?.status === 'error';
       const translationFailed = failed && data.job.operation === 'translate';
       if (failed && !translationFailed) message.textContent = publicReadingError(data.job.error, false);
+      if (failed && data.can_adjust_layout) openDialog();
       if (active) {
         const queued = data.job.status === 'queued';
         const ahead = Math.max(0, Number(data.job.jobs_ahead || 0));
@@ -400,7 +427,7 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
         timer = window.setTimeout(poll, 1500); return;
       }
       setProgress(externalAbort ? '商用LLMで現代語訳を生成しています…' : '');
-      if (data.quality === 'machine' && data.status === 'layout') {
+      if (data.quality === 'machine' && data.status === 'layout' && data.layout_line_count !== 0) {
         message.textContent = '文字認識に進みます…'; void run('recognize'); return;
       }
       if (data.lines.length) {
@@ -417,7 +444,10 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
         openDialog();
       } else {
         clearTranscription('機械翻刻は保存されていません。');
-        if (!failed) message.textContent = 'このページの機械翻刻は保存されていません。翻刻ボタンから再生成できます。';
+        if (!failed) message.textContent = data.layout_line_count === 0 && data.can_adjust_layout
+          ? '行枠がありません。「レイアウトを調整」から行枠を追加できます。'
+          : 'このページの機械翻刻は保存されていません。翻刻ボタンから再生成できます。';
+        if (data.can_adjust_layout) openDialog();
       }
       if (translationEnabled) {
         const shownTranslation = privateTranslation || data.translation;
@@ -447,7 +477,7 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
         const state = llmState(policy), commercial = state.provider !== 'local';
         const localPrivate = data.translation_scope === 'private' || data.quality === 'published' && !publishedTranslation;
         translateButton.hidden = !(!publishedTranslation && data.lines.length && data.translation_available && (commercial || localPrivate || (data.quality === 'machine' && !data.translation)));
-        translateButton.disabled = cacheBusy || !!externalAbort || active;
+        translateButton.disabled = cacheBusy || !!externalAbort || layoutLoading || !!layoutEditor || active;
         translateButton.textContent = commercial ? `${providerNames[state.provider]}で${privateTranslation ? '訳を作り直す' : '自分用の現代語訳を作る'}`
           : localPrivate ? `${privateTranslation ? '自分用の訳を作り直す' : '自分用の現代語訳を作る'}` : '実験的な現代語訳を作る';
         cancelTranslation.hidden = !externalAbort;
@@ -456,8 +486,59 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
       }
     };
 
+    layoutButton?.addEventListener('click', async () => {
+      if (!current?.can_adjust_layout || current.quality !== 'machine' || layoutLoading || layoutEditor
+        || cacheBusy || advancing || externalAbort || ['queued', 'running'].includes(current.job?.status)) return;
+      const epoch = requestEpoch, token = ++layoutToken, id = current.id, nonce = root.dataset.reading;
+      layoutLoading = true; renderCacheControls(current);
+      layoutStatus.hidden = false; layoutStatus.textContent = 'レイアウトと画像を読み込んでいます…';
+      try {
+        const css = new URL(`./dist/workspace.css${assetVersion}`, import.meta.url).href;
+        const loadCss = new Promise((resolve, reject) => {
+          let link = document.querySelector('link[data-kobun-layout-style]');
+          if (link?.sheet) { resolve(); return; }
+          const fresh = !link;
+          if (fresh) { link = document.createElement('link'); link.rel = 'stylesheet'; link.href = css; link.dataset.kobunLayoutStyle = ''; }
+          link.addEventListener('load', resolve, { once: true });
+          link.addEventListener('error', () => { link.remove(); reject(new Error('レイアウト画面を読み込めません。ページを再読み込みしてください。')); }, { once: true });
+          if (fresh) document.head.append(link);
+        });
+        const [layout, { mountPublicLayout }] = await Promise.all([
+          request(root.dataset.layout, { id, base_revision: current.revision }), import(`./dist/public-layout.js${assetVersion}`), loadCss,
+        ]);
+        if (epoch !== requestEpoch || token !== layoutToken) return;
+        const response = await fetch(`${root.dataset.layoutImage}?id=${encodeURIComponent(id)}`, {
+          credentials: 'same-origin', cache: 'no-store', headers: { 'X-Kobun-Reading': nonce },
+        });
+        if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || '画像を読み込めません。結果を開き直してください。');
+        const url = URL.createObjectURL(await response.blob());
+        if (epoch !== requestEpoch || token !== layoutToken) { URL.revokeObjectURL(url); return; }
+        layoutBlob = url; layoutHost.hidden = false; layoutStatus.hidden = true;
+        activateTab('transcription'); root.classList.add('is-layout-editing'); get('modal-title').textContent = 'レイアウト調整';
+        get('window-body').scrollTop = 0;
+        layoutEditor = mountPublicLayout(layoutHost, layout, { imageUrl: url,
+          onCancel: () => { if (leaveLayout()) layoutButton.focus(); },
+          onSubmit: async body => {
+            layoutSaving = true;
+            try {
+              const data = await request(root.dataset.layoutRecognize, body);
+              if (epoch !== requestEpoch || token !== layoutToken) return;
+              cancelExternal(); privateTranslation = null; localTranslationId = null; localResultId = null;
+              cleanupLayout(); clearTranscription(); activateTab('transcription'); render(data);
+            } catch (error) { throw new Error(publicReadingError(error, false)); }
+            finally { if (epoch === requestEpoch) layoutSaving = false; }
+          },
+        });
+      } catch (error) {
+        if (epoch === requestEpoch && token === layoutToken) { layoutStatus.hidden = false; layoutStatus.textContent = publicReadingError(error, false); }
+      } finally {
+        if (epoch === requestEpoch && token === layoutToken) { layoutLoading = false; renderCacheControls(current); }
+      }
+    });
+
     startButton.addEventListener('click', async () => {
-      if (!selectedPage || cacheBusy) return;
+      if (!selectedPage || cacheBusy || layoutLoading || layoutEditor) return;
+      if (current?.visitor_layout) { openDialog(); void poll(); return; }
       const epoch = requestEpoch, mediaId = Number(selectedPage.id);
       stop(); closeDialog(); message.textContent = '結果を確認しています…'; startButton.disabled = true;
       try { const data = await request(root.dataset.start, { media_id: mediaId }); if (epoch === requestEpoch) render(data); }
@@ -561,6 +642,7 @@ const [{ mountReadingWindow }, { llmState, subscribeLlm, mountLlmSettings, provi
       window.addEventListener('pagehide', () => { cancelExternal(); privateTranslation = null; translation.textContent = ''; });
     }
     window.addEventListener('pagehide', () => {
+      cleanupLayout();
       requestEpoch++; advancing = false; cacheBusy = false;
       if (root.dataset.forget) void fetch(root.dataset.forget, { method: 'POST', credentials: 'same-origin', keepalive: true,
         headers: { 'Content-Type': 'application/json', 'X-Kobun-CSRF': root.dataset.csrf, 'X-Kobun-Reading': root.dataset.reading },

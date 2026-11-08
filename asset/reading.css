@@ -11,6 +11,19 @@
   display: none !important;
 }
 
+.kobun-reading__layout-actions { margin:0 0 .75rem; }
+.kobun-reading__layout-status { margin:.5rem 0; font-size:.875rem; }
+.kobun-reading__layout-editor { padding:1rem; }
+.kobun-reading.is-layout-editing .kobun-reading__dialog { container-type:size; }
+.kobun-reading.is-layout-editing .kobun-reading__quality,
+.kobun-reading.is-layout-editing .kobun-reading__retention,
+.kobun-reading.is-layout-editing .kobun-reading__tabs,
+.kobun-reading.is-layout-editing .kobun-reading__tabpanel,
+.kobun-reading.is-layout-editing .kobun-reading__attribution,
+.kobun-reading.is-layout-editing .kobun-reading__responsibility,
+.kobun-reading.is-layout-editing .kobun-reading__provenance-details,
+.kobun-reading.is-layout-editing .kobun-reading__cache { display:none !important; }
+
 .kobun-reading__cache {
   margin: 1rem;
   padding: .75rem;

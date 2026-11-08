@@ -220,6 +220,9 @@ def make_handler(store, token, config):
                             doc = store.manage_cache(ident, body, before_regenerate=require_cache_engine)
                             self.respond(202 if body['action'] == 'regenerate' else 200, doc)
                             return
+                        if parts[2] == 'visitor-layout' and self.command == 'POST':
+                            self.respond(202, store.recognize_private_layout(ident, self.body()))
+                            return
                         if parts[2] == 'private-translation' and self.command == 'POST':
                             require_translation_ready()
                             doc, created = store.start_private_translation(ident, self.body())

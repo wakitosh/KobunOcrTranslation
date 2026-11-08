@@ -303,6 +303,9 @@ class CacheStorage:
         with self.lock:
             removed = 0
             for (ident,) in self._cache_db.execute("SELECT id FROM documents WHERE scope=? AND workflow IN ('assist','assist_translation')", (scope,)).fetchall():
+                # Deleting an OCR parent may already have removed its translation.
+                if not (self.directory(ident)/'document.json').is_file():
+                    continue
                 doc = self._read_raw(ident)
                 if body['target'] == 'translation' and doc['workflow'] != 'assist_translation':
                     continue

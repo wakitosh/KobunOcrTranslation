@@ -5,13 +5,17 @@ $pageData = json_encode($pages, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES 
 $dialogId = 'kobun-reading-dialog-' . bin2hex(random_bytes(4));
 ?>
 <link rel="stylesheet" href="<?= $this->escapeHtmlAttr($this->assetUrl('reading.css', 'KobunOcrTranslation')) ?>">
+<link rel="stylesheet" href="<?= $this->escapeHtmlAttr($this->assetUrl('select-controls.css', 'KobunOcrTranslation')) ?>">
 <?php if ($translationEnabled): ?><link rel="stylesheet" href="<?= $this->escapeHtmlAttr($this->assetUrl('llm-settings.css', 'KobunOcrTranslation')) ?>">
-<link rel="stylesheet" href="<?= $this->escapeHtmlAttr($this->assetUrl('select-controls.css', 'KobunOcrTranslation')) ?>"><?php endif; ?>
+<?php endif; ?>
 <section class="kobun-reading"
     data-start="<?= $this->escapeHtmlAttr($this->url('kobun-ocr-reading', $route + ['action' => 'start'])) ?>"
     data-status="<?= $this->escapeHtmlAttr($this->url('kobun-ocr-reading', $route + ['action' => 'status'])) ?>"
     data-run="<?= $this->escapeHtmlAttr($this->url('kobun-ocr-reading', $route + ['action' => 'run'])) ?>"
     data-forget="<?= $this->escapeHtmlAttr($this->url('kobun-ocr-reading', $route + ['action' => 'forget'])) ?>"
+    data-layout="<?= $this->escapeHtmlAttr($this->url('kobun-ocr-reading', $route + ['action' => 'layout'])) ?>"
+    data-layout-image="<?= $this->escapeHtmlAttr($this->url('kobun-ocr-reading', $route + ['action' => 'layout-image'])) ?>"
+    data-layout-recognize="<?= $this->escapeHtmlAttr($this->url('kobun-ocr-reading', $route + ['action' => 'layout-recognize'])) ?>"
     data-reading="<?= $this->escapeHtmlAttr($readingToken) ?>"
     <?php if ($cacheAdministrator ?? false): ?>data-cache="<?= $this->escapeHtmlAttr($this->url('kobun-ocr-reading', $route + ['action' => 'cache'])) ?>"<?php endif; ?>
     <?php if ($editorUrl ?? null): ?>data-editor="<?= $this->escapeHtmlAttr($editorUrl) ?>"<?php endif; ?>
@@ -33,12 +37,15 @@ $dialogId = 'kobun-reading-dialog-' . bin2hex(random_bytes(4));
     <div class="kobun-reading__window-body">
       <div class="kobun-reading__quality"></div>
       <p class="kobun-reading__retention" hidden></p>
+      <section class="kobun-reading__layout-editor" hidden></section>
       <?php if ($translationEnabled): ?><div class="kobun-reading__tabs" role="tablist" aria-label="閲覧支援結果">
         <button type="button" role="tab" class="kobun-reading__tab is-active" data-tab="transcription" aria-selected="true">翻刻</button>
         <button type="button" role="tab" class="kobun-reading__tab" data-tab="translation" aria-selected="false">現代語訳</button>
       </div><?php endif; ?>
       <div class="kobun-reading__progress" role="status" aria-live="polite" hidden><span aria-hidden="true"></span><b></b></div>
       <section class="kobun-reading__tabpanel" data-panel="transcription" role="tabpanel">
+        <div class="kobun-reading__layout-actions"><button type="button" class="kobun-reading__adjust-layout" hidden>レイアウトを調整</button>
+          <p class="kobun-reading__layout-status" role="status" hidden></p></div>
         <div class="kobun-reading__transcription"></div>
         <?php if ($editorUrl ?? null): ?><p class="kobun-reading__editor-tools"><a class="kobun-reading__editor-link" target="_blank" rel="noopener" hidden>このページの翻刻を編集（別タブ）</a></p><?php endif; ?>
       </section>

@@ -1,5 +1,5 @@
 /* Keep single-choice dropdowns recognizable even when the theme resets native arrows. */
-:is(.kobun-app, .kobun-llm, .kobun-config-controls, :where(#kobun-service-control))
+:is(.kobun-app, .kobun-llm, .kobun-config-controls, .kobun-public-layout, :where(#kobun-service-control))
 select:not([multiple]):is(:not([size]), [size="0"], [size="1"]) {
   -webkit-appearance: none;
   -moz-appearance: none;
@@ -14,14 +14,14 @@ select:not([multiple]):is(:not([size]), [size="0"], [size="1"]) {
   cursor: pointer;
 }
 
-:is(.kobun-app, .kobun-llm, .kobun-config-controls, :where(#kobun-service-control))
+:is(.kobun-app, .kobun-llm, .kobun-config-controls, .kobun-public-layout, :where(#kobun-service-control))
 select:not([multiple]):is(:not([size]), [size="0"], [size="1"]):disabled {
   cursor: not-allowed;
 }
 
 /* Use the system arrow and colors in high-contrast mode. */
 @media (forced-colors: active) {
-  :is(.kobun-app, .kobun-llm, .kobun-config-controls, :where(#kobun-service-control))
+  :is(.kobun-app, .kobun-llm, .kobun-config-controls, .kobun-public-layout, :where(#kobun-service-control))
   select:not([multiple]):is(:not([size]), [size="0"], [size="1"]) {
     -webkit-appearance: auto;
     -moz-appearance: auto;
