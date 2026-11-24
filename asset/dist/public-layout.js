@@ -1,4 +1,4 @@
-import { c as W, j as t, r as o, p as Z, b as ee, I as te, e as Y, f as re } from "./viewer-e2wgwl0s.js";
+import { c as W, j as t, r as o, p as Z, b as ee, I as te, e as Y, f as re } from "./viewer-CliHQYVE.js";
 const X = (l) => l.map((h, b) => ({ ...h, readingOrder: b + 1 }));
 function ae(l, h, b) {
   const i = W.createRoot(l), f = { current: !1 };

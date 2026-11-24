@@ -1,4 +1,4 @@
-import { c as gn, j as e, r as l, p as fn, I as vn, d as at, a as st, l as rt, b as kn, e as Xt, f as wn } from "./viewer-e2wgwl0s.js";
+import { c as gn, j as e, r as l, p as fn, I as vn, d as at, a as st, l as rt, b as kn, e as Xt, f as wn } from "./viewer-CliHQYVE.js";
 import { llmState as Bt, subscribeLlm as yn, providerNames as lt, mountLlmSettings as _n, confirmCommercial as Nn, translateCommercial as Cn } from "./llm.js";
 const D = document.getElementById("kobun-workspace"), c = D.dataset.canManage === "1", L = D.dataset.canEditTranscription === "1", Sn = D.dataset.transcriptionScope === "all" ? "all" : "owned", qt = (r) => `${D.dataset.proxy}?endpoint=${encodeURIComponent(r)}`;
 async function ct(r) {

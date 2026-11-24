@@ -1,7 +1,7 @@
 /**
  * Adapted from honkoku-ocr-web, Yuta Hashimoto, CC BY 4.0.
  * Source revision: 24469701412edda5be26c89784a29c7525bbb899.
- * Changes: local types; plain NDL text; pointer cancellation cleanup; image errors; read-only stages; explicit line focus; direction-aware popups.
+ * Changes: local types; plain NDL text; pointer cancellation cleanup; image errors; read-only stages; explicit line focus; direction-aware popups; Canvas rendering for GPU compatibility.
  * See THIRD_PARTY_NOTICES.md for source and license.
  */
 import { useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle } from 'react'
@@ -75,6 +75,7 @@ export const ImageViewer = forwardRef<ImageViewerHandle, ImageViewerProps>(funct
   const lineElsRef = useRef<Map<number, HTMLDivElement>>(new Map())
   const [isOpen, setIsOpen] = useState(false)
   const [imageError, setImageError] = useState(false)
+  const [imageAttempt, setImageAttempt] = useState(0)
   const cancelEditRef = useRef<(() => void) | null>(null)
   const [hover, setHover] = useState<HoverState | null>(null)
   const [selBox, setSelBox] = useState<ScreenRect | null>(null)
@@ -167,13 +168,18 @@ export const ImageViewer = forwardRef<ImageViewerHandle, ImageViewerProps>(funct
   useEffect(() => {
     if (!hostRef.current) return
     const host = hostRef.current
-    const viewer = OpenSeadragon({
+    // These are already bounded JPEGs, not full-resolution IIIF pyramids. Prefer
+    // Canvas: a WebGL context can exist while a driver produces only a blank image.
+    // Keep this local so the site's Mirador rendering is unaffected.
+    const options: OpenSeadragon.Options & { drawer: string[] } = {
       element: host,
+      drawer: ['canvas', 'html'],
       showNavigationControl: false,
       gestureSettingsMouse: { clickToZoom: false, dblClickToZoom: true },
       visibilityRatio: 1, minZoomImageRatio: 0.8, maxZoomPixelRatio: 4,
       animationTime: 0.4, preserveImageSizeOnResize: true,
-    })
+    }
+    const viewer = OpenSeadragon(options)
     viewerRef.current = viewer
     viewer.addHandler('update-viewport', () => recomputeRef.current())
 
@@ -285,9 +291,14 @@ export const ImageViewer = forwardRef<ImageViewerHandle, ImageViewerProps>(funct
     const onError = () => setImageError(true)
     viewer.addHandler('open', onOpen)
     viewer.addHandler('open-failed', onError)
+    viewer.addHandler('tile-load-failed', onError)
     viewer.open({ type: 'image', url: dataUrl, buildPyramid: false })
-    return () => { viewer.removeHandler('open', onOpen); viewer.removeHandler('open-failed', onError) }
-  }, [dataUrl])
+    return () => {
+      viewer.removeHandler('open', onOpen)
+      viewer.removeHandler('open-failed', onError)
+      viewer.removeHandler('tile-load-failed', onError)
+    }
+  }, [dataUrl, imageAttempt])
 
   // 視覚オーバーレイ（bbox + 番号 + 領域。pointer-events:none） 再構築
   useEffect(() => {
@@ -393,7 +404,10 @@ export const ImageViewer = forwardRef<ImageViewerHandle, ImageViewerProps>(funct
   return (
     <div className="osd-root">
       <div className="osd-host" ref={hostRef} />
-      {imageError && <div className="kobun-empty" role="alert">画像を開けません。ページを開き直してください。</div>}
+      {imageError && <div className="osd-image-error" role="alert">
+        <p>画像を表示できません。再読み込みしても表示されない場合は、この画面を開き直してください。</p>
+        <button type="button" onClick={() => setImageAttempt(attempt => attempt + 1)}>画像を再読み込み</button>
+      </div>}
 
       {/* 確定した選択領域（範囲指定レイアウト/削除の対象） */}
       {regionScreen && !drawRect && (

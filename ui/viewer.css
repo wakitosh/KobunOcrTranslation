@@ -9,6 +9,14 @@
 .osd-root { position: absolute; inset: 0; }
 /* z-index:0 で stacking context を作り、OSD 内部要素が編集レイヤー(z>0)より前に出ないようにする */
 .osd-host { position: absolute; inset: 0; z-index: 0; }
+.osd-image-error {
+  position: absolute; inset: 0; z-index: 70;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 1rem; gap: .75rem; overflow: auto;
+  background: #263238; color: #fff; text-align: center;
+}
+.osd-image-error p { margin: 0; }
+.osd-image-error button { padding: .5rem 1rem; min-height: 44px; cursor: pointer; }
 
 /* 選択行の編集レイヤー（移動面 + リサイズハンドル + 削除ボタン） */
 /* 領域選択（範囲指定レイアウト/削除） */
