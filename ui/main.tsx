@@ -47,8 +47,24 @@ const inferStage = (doc: Document): Stage => doc.publication_state === 'reviewed
 const ordered = (lines: LineBox[]) => lines.map((line, i) => ({ ...line, readingOrder: i + 1 }));
 const labels: Record<string, string> = { layout: 'レイアウト認識', recognize: '文字認識', translate: '現代語訳', queued: '処理待ち', running: '処理中', human_edit: 'レイアウトの手動修正', transcription_edit: '翻刻の修正', image_saved: '画像の保存', translation_input_edit: '翻訳用本文の編集', translation_manual: '現代語訳の入力・修正', translation_commercial: '商用LLMの現代語訳を取り込み', translation_delete: '現代語訳の削除', publication_draft: '下書きへ変更', publication_reviewed: '確認済みへ変更', publication_published: '公開', publication_metadata: '責任表示・研究成果情報の変更', interrupted: '中断', error: '処理失敗' };
 const publicationLabels = { draft: '下書き', reviewed: '確認済み', published: '公開中' } as const;
+function isImageOnly(saved: Document): boolean {
+  // Empty detection results and failed/queued attempts are still work. Only the
+  // initial image record, with no saved edits or processing, belongs here.
+  return (!saved.status || ['image', 'image_saved'].includes(saved.status))
+    && (!saved.publication_state || saved.publication_state === 'draft')
+    && !saved.job && saved.lines.length === 0 && saved.regions.length === 0
+    && !saved.translation && !saved.translation_draft
+    && !saved.transcription_credit?.trim() && !saved.review_note?.trim()
+    && !Object.values(saved.transcription_metadata || {}).some(value => value?.trim())
+    && Object.keys(saved.provenance || {}).length === 0;
+}
+function materialProgress(material: { started: number; imageOnly: number }): string {
+  return [material.started ? `${material.started}ページ着手済み` : '',
+    material.imageOnly ? `画像読込のみ ${material.imageOnly}ページ` : ''].filter(Boolean).join('・');
+}
 function savedPageProgress(saved?: Document): { label: string; detail?: string } {
   if (!saved) return { label: '未着手' };
+  if (isImageOnly(saved)) return { label: '画像読込のみ' };
   // Imported research metadata alone does not mean the final review step was reached.
   const hasText = saved.lines.length > 0 && saved.lines.every(line => line.raw !== undefined);
   let label = saved.publication_state === 'published' ? '公開中'
@@ -171,11 +187,13 @@ function Workspace() {
   if (doc) savedPages.set(doc.source.media_id, doc);
   const materials = Array.from(Array.from(savedPages.values()).reduce((map, saved) => {
     const id = saved.source.item_id;
-    const existing = map.get(id);
-    if (existing) existing.count += 1;
-    else map.set(id, { id, title: saved.source.item_title, identifier: saved.source.item_identifier || '', count: 1 });
+    const material = map.get(id) || { id, title: saved.source.item_title,
+      identifier: saved.source.item_identifier || '', started: 0, imageOnly: 0 };
+    if (isImageOnly(saved)) material.imageOnly += 1;
+    else material.started += 1;
+    map.set(id, material);
     return map;
-  }, new Map<number, { id: number; title: string; identifier: string; count: number }>()).values());
+  }, new Map<number, { id: number; title: string; identifier: string; started: number; imageOnly: number }>()).values());
   const currentItemId = pages[0]?.item_id ?? doc?.source.item_id ?? 0;
 
   function accept(next: Document, preserveReviewMetadata = false) {
@@ -584,7 +602,7 @@ function Workspace() {
         <select id="kobun-material" value={currentItemId || ''} disabled={busy || !materials.length} onChange={e => e.target.value && void loadPages(1, e.target.value)}>
           <option value="">保存済み資料から選択</option>
           {!!currentItemId && !materials.some(material => material.id === currentItemId) && <option value={currentItemId}>{itemTitle || doc?.source.item_title} — {loadedIdentifier || doc?.source.item_identifier || '識別子なし'}（未着手）</option>}
-          {materials.map(material => <option key={material.id} value={material.id}>{material.title} — {material.identifier || '識別子なし'}（{material.count}ページ着手済み）</option>)}
+          {materials.map(material => <option key={material.id} value={material.id}>{material.title} — {material.identifier || '識別子なし'}（{materialProgress(material)}）</option>)}
         </select></div>
       <div className="kobun-utilities"><span className="kobun-muted">{canManage ? '管理者 · 全工程を操作可能' : canEditTranscription
         ? `翻刻修正者 · ${transcriptionScope === 'all' ? '閲覧可能な全資料' : '自分が所有する資料'}のみ` : '閲覧のみ'}</span>
